@@ -2,8 +2,10 @@
 
 Patrones de sowftware A-194
 
-Integrantes: Camilo Andres Pacheco Gomez
-Sandra Liseth Guerrero 
+Integrante1: Camilo Andres Pacheco Gomez
+Integrante2: Sandra Liseth Guerrero 
+
+Profesor: Eliser Montero Ojeda
 
 Plataforma de Telemedicina
 -Consulta vistuales en tiempo real  con multiples especialidades
