@@ -8,7 +8,8 @@ Integrante2: Sandra Liseth Guerrero
 Profesor: Eliser Montero Ojeda
 
 Plataforma de Telemedicina
--Consulta visuales en tiempo real  con multiples especialidades
-- Sistema de prescripcciones digitales y Ordenes Medicas
-- Integracion con Laboratorios y farmacias
-- Escabilidad para atencion de emergencias masivas
+
+1. Consulta visuales en tiempo real  con multiples especialidades
+2. Sistema de prescripcciones digitales y Ordenes Medicas 
+3. Integracion con Laboratorios y farmacias
+4. Escabilidad para atencion de emergencias masivas
