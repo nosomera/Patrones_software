@@ -99,6 +99,16 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'telemedicina_db',
+        'USER': 'root',
+        'PASSWORD': '',      # XAMPP por defecto no tiene contraseña
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
+    }
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
