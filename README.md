@@ -13,3 +13,8 @@ Plataforma de Telemedicina
 2. Sistema de prescripcciones digitales y Ordenes Medicas 
 3. Integracion con Laboratorios y farmacias
 4. Escabilidad para atencion de emergencias masivas
+
+#Probar en el navegador:
+
+http://localhost:8000/medicinas/ → Singleton + BD
+http://localhost:8000/pacientes/ → Factory Method + BD
