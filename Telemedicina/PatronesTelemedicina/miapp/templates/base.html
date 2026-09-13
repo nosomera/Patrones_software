@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Plataforma de Telemedicina{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    {% extends "base.html" %}
+{% block title %}Agendar cita{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Agendar cita</h1>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+      <div class="row">
+        <div class="col-md-6">{% include "_form_field.html" with field=form.especialidad %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.tipo %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.sede %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.medico %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.fecha %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.hora %}</div>
+        <div class="col-12">{% include "_form_field.html" with field=form.motivo_consulta %}</div>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Agendar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+    {% if request.user.is_authenticated %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{% url 'post_login_redirect' %}">🩺 Telemedicina</a>
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <span class="text-white-50 small d-none d-sm-inline">
+                    {{ request.user.nombre_completo }} · {{ request.user.get_tipo_usuario_display }}
+                </span>
+                <a href="{% url 'logout' %}" class="btn btn-sm btn-outline-light">Cerrar sesión</a>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <div class="container py-4" style="max-width: 850px;">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-danger" role="alert">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+
+</body>
+</html>

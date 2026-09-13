@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Reagendar cita{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Reagendar cita</h1>
+<div class="card shadow-sm border-0" style="max-width: 500px;">
+  <div class="card-body p-4">
+    <p class="text-muted">Cita actual: {{ cita.fecha }} a las {{ cita.hora }}</p>
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% include "_form_field.html" with field=form.fecha %}
+      {% include "_form_field.html" with field=form.hora %}
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Confirmar cambio</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

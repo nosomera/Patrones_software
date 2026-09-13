@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Registro de paciente{% endblock %}
+
+{% block content %}
+<div class="text-center mb-4">
+    <h1 class="fw-bold text-primary">Registro de paciente</h1>
+    <p class="text-muted">Crea tu cuenta para agendar y consultar tus citas</p>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% for error in form.non_field_errors %}
+                <div class="alert alert-danger py-2">{{ error }}</div>
+            {% endfor %}
+
+            <h6 class="text-secondary fw-bold mb-3">Datos de acceso</h6>
+            <div class="row">
+                <div class="col-md-6">{% include "_form_field.html" with field=form.cedula %}</div>
+                <div class="col-md-6"></div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.password %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.password2 %}</div>
+            </div>
+
+            <h6 class="text-secondary fw-bold mb-3 mt-2">Datos personales</h6>
+            <div class="row">
+                <div class="col-md-6">{% include "_form_field.html" with field=form.nombre_completo %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.genero %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.fecha_nacimiento %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.correo %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.telefono %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.direccion %}</div>
+            </div>
+
+            <h6 class="text-secondary fw-bold mb-3 mt-2">Datos médicos</h6>
+            <div class="row">
+                <div class="col-md-6">{% include "_form_field.html" with field=form.eps %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.tipo_sangre %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.contacto_emergencia %}</div>
+                <div class="col-md-6">{% include "_form_field.html" with field=form.ciudad_residencia %}</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-3">Registrarme</button>
+        </form>
+
+        <p class="text-center text-muted small mt-3 mb-0">
+            ¿Ya tienes cuenta? <a href="{% url 'login' %}">Inicia sesión</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

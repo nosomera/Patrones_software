@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Atender cita{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-1">Atender a {{ cita.paciente.usuario.nombre_completo }}</h1>
+<p class="text-muted mb-4">{{ cita.fecha }} · {{ cita.hora }} · {{ cita.get_tipo_display }}</p>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% include "_form_field.html" with field=form.motivo_consulta %}
+      {% include "_form_field.html" with field=form.enfermedad_actual %}
+      {% include "_form_field.html" with field=form.diagnostico %}
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Guardar y continuar a prescripción</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

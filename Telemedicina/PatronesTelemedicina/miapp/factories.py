@@ -1,56 +1,66 @@
+from datetime import date, time
 from abc import ABC, abstractmethod
-from .models import Paciente
+
+from .models import Cita, Especialidad, Medico, Paciente, Sede, Usuario
+
+from django.db import transaction
 
 
-class PacienteCreator(ABC):
-    """Creador abstracto: define el método fábrica"""
+class CitaCreator(ABC):
+    """Creador abstracto: define el método fábrica para agendar una cita."""
 
     @abstractmethod
-    def crear_paciente(self, datos: dict) -> Paciente:
+    def crear_cita(self, datos: dict) -> Cita:
         pass
 
 
-class PacientePresencialCreator(PacienteCreator):
-    def crear_paciente(self, datos: dict) -> Paciente:
-        return Paciente.objects.create(
-            nombre=datos["nombre"],
-            apellido=datos["apellido"],
-            documento_identidad=datos["documento_identidad"],
-            fecha_nacimiento=datos["fecha_nacimiento"],
-            telefono=datos.get("telefono", ""),
-            email=datos.get("email", ""),
-            direccion=datos.get("direccion", ""),
-            tipo_atencion="presencial",
+class CitaPresencialCreator(CitaCreator):
+    def crear_cita(self, datos: dict) -> Cita:
+        sede = Sede.objects.get(pk=datos["sede_id"])
+        if not sede.atiende_presencial:
+            raise ValueError(f"La sede {sede.nombre} no atiende citas presenciales")
+
+        return Cita.objects.create(
+            paciente=Paciente.objects.get(pk=datos["paciente_id"]),
+            medico=Medico.objects.get(pk=datos["medico_id"]),
+            especialidad=Especialidad.objects.get(pk=datos["especialidad_id"]),
+            sede=sede,
+            tipo="presencial",
+            fecha=datos["fecha"],
+            hora=datos["hora"],
+            motivo_consulta=datos.get("motivo_consulta", ""),
         )
 
 
-class PacienteVirtualCreator(PacienteCreator):
-    def crear_paciente(self, datos: dict) -> Paciente:
-        if not datos.get("email"):
-            raise ValueError("El email es obligatorio para pacientes de telemedicina")
-
-        return Paciente.objects.create(
-            nombre=datos["nombre"],
-            apellido=datos["apellido"],
-            documento_identidad=datos["documento_identidad"],
-            fecha_nacimiento=datos["fecha_nacimiento"],
-            telefono=datos.get("telefono", ""),
-            email=datos["email"],
-            tipo_atencion="virtual",
+class CitaVirtualCreator(CitaCreator):
+    def crear_cita(self, datos: dict) -> Cita:
+        cita = Cita.objects.create(
+            paciente=Paciente.objects.get(pk=datos["paciente_id"]),
+            medico=Medico.objects.get(pk=datos["medico_id"]),
+            especialidad=Especialidad.objects.get(pk=datos["especialidad_id"]),
+            sede=None,
+            tipo="virtual",
+            fecha=datos["fecha"],
+            hora=datos["hora"],
+            motivo_consulta=datos.get("motivo_consulta", ""),
         )
+        # Aquí se disparará la creación de SesionVideollamada cuando
+        # construyamos ese módulo (GestorConexionVideollamada, Singleton).
+        print(f"[CitaFactory] Cita virtual #{cita.id} creada — pendiente generar sala de videollamada")
+        return cita
 
 
-class PacienteFactory:
-    """Decide qué Creator usar según el tipo de atención"""
+class CitaFactory:
+    """Decide qué Creator usar según el tipo de cita (Factory Method)."""
 
     _creators = {
-        "presencial": PacientePresencialCreator,
-        "virtual": PacienteVirtualCreator,
+        "presencial": CitaPresencialCreator,
+        "virtual": CitaVirtualCreator,
     }
 
     @staticmethod
-    def obtener_creator(tipo_atencion: str) -> PacienteCreator:
-        creator_class = PacienteFactory._creators.get(tipo_atencion)
+    def obtener_creator(tipo: str) -> CitaCreator:
+        creator_class = CitaFactory._creators.get(tipo)
         if creator_class is None:
-            raise ValueError(f"Tipo de atención no válido: {tipo_atencion}")
+            raise ValueError(f"Tipo de cita no válido: {tipo}")
         return creator_class()

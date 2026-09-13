@@ -80,6 +80,12 @@ DATABASES = {
     }
 }
 
+AUTH_USER_MODEL = "miapp.Usuario"
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "post_login_redirect"
+LOGOUT_REDIRECT_URL = "login"
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
@@ -98,6 +104,9 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 DATABASES = {
     'default': {

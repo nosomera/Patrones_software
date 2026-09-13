@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Historial de recetas{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Recetas de {{ paciente.usuario.nombre_completo }}</h1>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    {% if recetas %}
+      <div class="list-group list-group-flush">
+        {% for receta in recetas %}
+          <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+            <div>
+              <h6 class="mb-1 fw-bold">Folio {{ receta.folio }}</h6>
+              <small class="text-muted">Emitida: {{ receta.fecha_emision|date:"d/m/Y" }} · Vence: {{ receta.fecha_expiracion|date:"d/m/Y" }} · {{ receta.get_estado_display }}</small>
+            </div>
+            <div class="d-flex gap-2">
+              {% if receta.pdf %}<a href="{{ receta.pdf.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">Ver PDF</a>{% endif %}
+              <a href="{% url 'renovar_receta' receta.id %}" class="btn btn-sm btn-primary">Renovar</a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info mb-0">No hay recetas registradas.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Mis citas{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-3">Mis citas</h1>
+<div class="btn-group mb-4">
+  <a href="?periodo=dia" class="btn btn-outline-primary {% if periodo == 'dia' %}active{% endif %}">Día</a>
+  <a href="?periodo=semana" class="btn btn-outline-primary {% if periodo == 'semana' %}active{% endif %}">Semana</a>
+  <a href="?periodo=mes" class="btn btn-outline-primary {% if periodo == 'mes' %}active{% endif %}">Mes</a>
+</div>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    {% if citas %}
+      <div class="list-group list-group-flush">
+        {% for cita in citas %}
+          <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+            <div>
+              <h6 class="mb-1 fw-bold">{{ cita.paciente.usuario.nombre_completo }}</h6>
+              <small class="text-muted">{{ cita.fecha }} · {{ cita.hora }} · {{ cita.get_tipo_display }}</small>
+            </div>
+            {% if cita.estado != "atendida" %}
+              <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">Atender</a>
+            {% else %}
+              <span class="badge bg-success">Atendida</span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info mb-0">No tienes citas en este período.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

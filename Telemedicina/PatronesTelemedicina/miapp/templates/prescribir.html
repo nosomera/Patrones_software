@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Prescribir medicamentos{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Prescribir medicamentos</h1>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {{ formset.management_form }}
+      {% for form in formset %}
+        <div class="border rounded p-3 mb-3">
+          <h6 class="text-secondary fw-bold">Medicamento {{ forloop.counter }}</h6>
+          <div class="row">
+            <div class="col-md-6">{% include "_form_field.html" with field=form.medicamento %}</div>
+            <div class="col-md-6">{% include "_form_field.html" with field=form.dosis %}</div>
+            <div class="col-md-6">{% include "_form_field.html" with field=form.via_administracion %}</div>
+            <div class="col-md-6">{% include "_form_field.html" with field=form.frecuencia %}</div>
+            <div class="col-md-6">{% include "_form_field.html" with field=form.duracion_tratamiento %}</div>
+            <div class="col-md-6">{% include "_form_field.html" with field=form.cantidad_total %}</div>
+            <div class="col-12">{% include "_form_field.html" with field=form.indicaciones %}</div>
+          </div>
+        </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2">Generar receta</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
