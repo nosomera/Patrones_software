@@ -1,10 +1,90 @@
-from datetime import date, time
 from abc import ABC, abstractmethod
-
-from .models import Cita, Especialidad, Medico, Paciente, Sede, Usuario
 
 from django.db import transaction
 
+from .models import Cita, Especialidad, Medico, Paciente, Sede, Usuario
+
+
+# ---------------------------------------------------------------------
+# Factory Method #1: Usuario (paciente / médico) — usado en el registro
+# ---------------------------------------------------------------------
+
+class UsuarioCreator(ABC):
+    """Creador abstracto: define el método fábrica para registrar un usuario."""
+
+    @abstractmethod
+    def crear_usuario(self, datos: dict) -> Usuario:
+        pass
+
+
+class PacienteCreator(UsuarioCreator):
+    @transaction.atomic
+    def crear_usuario(self, datos: dict) -> Usuario:
+        usuario = Usuario.objects.create_user(
+            cedula=datos["cedula"],
+            password=datos["password"],
+            tipo_usuario="paciente",
+            nombre_completo=datos["nombre_completo"],
+            correo=datos.get("correo", ""),
+            genero=datos.get("genero", ""),
+            fecha_nacimiento=datos.get("fecha_nacimiento"),
+        )
+        Paciente.objects.create(
+            usuario=usuario,
+            telefono=datos.get("telefono", ""),
+            direccion=datos.get("direccion", ""),
+            eps=datos.get("eps", ""),
+            tipo_sangre=datos.get("tipo_sangre", ""),
+            contacto_emergencia=datos.get("contacto_emergencia", ""),
+            ciudad_residencia=datos.get("ciudad_residencia", ""),
+        )
+        return usuario
+
+
+class MedicoCreator(UsuarioCreator):
+    @transaction.atomic
+    def crear_usuario(self, datos: dict) -> Usuario:
+        if not datos.get("especialidad_id"):
+            raise ValueError("La especialidad es obligatoria para registrar un médico")
+
+        usuario = Usuario.objects.create_user(
+            cedula=datos["cedula"],
+            password=datos["password"],
+            tipo_usuario="medico",
+            nombre_completo=datos["nombre_completo"],
+            correo=datos.get("correo", ""),
+            genero=datos.get("genero", ""),
+            fecha_nacimiento=datos.get("fecha_nacimiento"),
+        )
+        especialidad = Especialidad.objects.get(pk=datos["especialidad_id"])
+        Medico.objects.create(
+            usuario=usuario,
+            especialidad=especialidad,
+            numero_tarjeta_profesional=datos.get("numero_tarjeta_profesional", ""),
+            telefono=datos.get("telefono", ""),
+        )
+        return usuario
+
+
+class UsuarioFactory:
+    """Decide qué Creator usar según el tipo de usuario (Factory Method)."""
+
+    _creators = {
+        "paciente": PacienteCreator,
+        "medico": MedicoCreator,
+    }
+
+    @staticmethod
+    def obtener_creator(tipo_usuario: str) -> UsuarioCreator:
+        creator_class = UsuarioFactory._creators.get(tipo_usuario)
+        if creator_class is None:
+            raise ValueError(f"Tipo de usuario no válido: {tipo_usuario}")
+        return creator_class()
+
+
+# ---------------------------------------------------------------------
+# Factory Method #2: Cita (presencial / virtual) — usado al agendar
+# ---------------------------------------------------------------------
 
 class CitaCreator(ABC):
     """Creador abstracto: define el método fábrica para agendar una cita."""
@@ -44,8 +124,6 @@ class CitaVirtualCreator(CitaCreator):
             hora=datos["hora"],
             motivo_consulta=datos.get("motivo_consulta", ""),
         )
-        # Aquí se disparará la creación de SesionVideollamada cuando
-        # construyamos ese módulo (GestorConexionVideollamada, Singleton).
         print(f"[CitaFactory] Cita virtual #{cita.id} creada — pendiente generar sala de videollamada")
         return cita
 

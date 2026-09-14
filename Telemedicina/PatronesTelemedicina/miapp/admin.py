@@ -1,9 +1,10 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import Sede, Cita
-from .models import Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta
 
-from .models import Usuario, Especialidad, Paciente, Medico, Medicina
+from .models import (
+    Usuario, Especialidad, Paciente, Medico, Medicina,
+    Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta,
+)
 
 
 class UsuarioAdmin(UserAdmin):
@@ -30,9 +31,6 @@ admin.site.register(Especialidad)
 admin.site.register(Paciente)
 admin.site.register(Medico)
 admin.site.register(Medicina)
-admin.site.register(Sede)
-admin.site.register(Cita)
-
 admin.site.register(Sede)
 admin.site.register(Cita)
 admin.site.register(DisponibilidadMedica)
