@@ -40,6 +40,23 @@ cd PatronesTelemedicina
 ```bash
 pip install -r requirements.txt
 ```
+### 4.1. Configurar credenciales de MySQL
+Abre `PatronesTelemedicina/settings.py` y ajusta el bloque `DATABASES`
+con tu usuario y contraseña de MySQL (si usas XAMPP, `USER` normalmente
+sigue siendo `root` y `PASSWORD` queda vacío):
+
+```python
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'telemedicina_db',
+        'USER': 'root',
+        'PASSWORD': '',
+        'HOST': '127.0.0.1',
+        'PORT': '3306',
+    }
+}
+```
 
 ### 5. Crear la base de datos en MySQL
 ```bash
