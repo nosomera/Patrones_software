@@ -86,7 +86,7 @@ DATABASES = {
 
 ### 7. Aplicar migraciones
 ```bash
-cd PatronesTelemedicina
+cd ..
 python manage.py migrate
 ```
 
