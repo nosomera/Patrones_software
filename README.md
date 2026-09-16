@@ -19,7 +19,7 @@ Plataforma de Telemedicina
 ### 1. Clonar el repositorio
 ```bash
 git clone https://github.com/nosomera/Patrones_software.git
-cd Telemedicina
+cd Patrones_software
 ```
 
 ### 2. Crear y activar el entorno virtual
