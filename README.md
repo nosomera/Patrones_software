@@ -19,7 +19,6 @@ Plataforma de Telemedicina
 ### 1. Clonar el repositorio
 ```bash
 git clone https://github.com/nosomera/Patrones_software.git
-cd Patrones_software
 cd Telemedicina
 ```
 
