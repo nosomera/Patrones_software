@@ -18,7 +18,7 @@ Plataforma de Telemedicina
 
 ### 1. Clonar el repositorio
 ```bash
-git clone <URL_DEL_REPO>
+git clone https://github.com/nosomera/Patrones_software.git
 cd Telemedicina
 ```
 
@@ -28,15 +28,6 @@ cd Telemedicina
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
-```
-
-> Si PowerShell bloquea la activación, corre primero:
-> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned`
-
-**Linux / macOS:**
-```bash
-python3 -m venv venv
-source venv/bin/activate
 ```
 
 ### 3. Entrar a la carpeta del proyecto Django
