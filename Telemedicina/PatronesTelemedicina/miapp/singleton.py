@@ -48,6 +48,7 @@ class ConfiguracionSistema:
         self.dias_expiracion_receta = 30
         self.tamanio_maximo_archivo_mb = 10
         self.formatos_permitidos = ["pdf", "jpg", "png"]
+        self.proveedor_videollamada_por_defecto = "zoom" 
 
     def puede_reagendar(self, fecha_hora_cita: datetime) -> bool:
         """

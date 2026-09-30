@@ -21,6 +21,15 @@
           </div>
         </div>
       {% endfor %}
+
+      <div class="mb-3" style="max-width: 300px;">
+        <label class="form-label fw-semibold">Formato del documento</label>
+        <select name="formato" class="form-select">
+          <option value="pdf" selected>PDF (para imprimir)</option>
+          <option value="html">HTML (vista web)</option>
+        </select>
+      </div>
+
       <button type="submit" class="btn btn-primary w-100 fw-bold py-2">Generar receta</button>
     </form>
   </div>

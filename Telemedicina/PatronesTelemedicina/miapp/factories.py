@@ -4,6 +4,8 @@ from django.db import transaction
 
 from .models import Cita, Especialidad, Medico, Paciente, Sede, Usuario
 
+from .adapters import obtener_proveedor_videollamada
+from .singleton import ConfiguracionSistema
 
 # ---------------------------------------------------------------------
 # Factory Method #1: Usuario (paciente / médico) — usado en el registro
@@ -111,7 +113,6 @@ class CitaPresencialCreator(CitaCreator):
             motivo_consulta=datos.get("motivo_consulta", ""),
         )
 
-
 class CitaVirtualCreator(CitaCreator):
     def crear_cita(self, datos: dict) -> Cita:
         cita = Cita.objects.create(
@@ -124,7 +125,22 @@ class CitaVirtualCreator(CitaCreator):
             hora=datos["hora"],
             motivo_consulta=datos.get("motivo_consulta", ""),
         )
-        print(f"[CitaFactory] Cita virtual #{cita.id} creada — pendiente generar sala de videollamada")
+
+        # --- Aquí entra el Adapter ---
+        # CitaVirtualCreator no sabe nada de Zoom ni de Jitsi: solo le
+        # pide una sala a "un proveedor de videollamadas" cualquiera.
+        config = ConfiguracionSistema()
+        nombre_proveedor = datos.get("proveedor_videollamada", config.proveedor_videollamada_por_defecto)
+        proveedor = obtener_proveedor_videollamada(nombre_proveedor)
+        sala = proveedor.crear_sala(cita)
+
+        cita.sala_id = sala.sala_id
+        cita.url_medico = sala.url_medico
+        cita.url_paciente = sala.url_paciente
+        cita.proveedor_videollamada = sala.proveedor
+        cita.save(update_fields=["sala_id", "url_medico", "url_paciente", "proveedor_videollamada"])
+
+        print(f"[CitaFactory] Cita virtual #{cita.id} creada — sala generada en {sala.proveedor} ({sala.sala_id})")
         return cita
 
 

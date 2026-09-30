@@ -20,6 +20,11 @@
               {% if cita.estado == "agendada" or cita.estado == "reagendada" %}
                 <a href="{% url 'reagendar_cita' cita.id %}" class="btn btn-sm btn-outline-primary">Reagendar</a>
               {% endif %}
+              {% if cita.tipo == "virtual" and cita.url_paciente %}
+                <a href="{{ cita.url_paciente }}" target="_blank" class="btn btn-sm btn-success">
+                  Unirse a videollamada ({{ cita.proveedor_videollamada|upper }})
+                </a>
+              {% endif %}
             </div>
           </div>
         {% endfor %}

@@ -13,7 +13,7 @@
               <small class="text-muted">Emitida: {{ receta.fecha_emision|date:"d/m/Y" }} · Vence: {{ receta.fecha_expiracion|date:"d/m/Y" }} · {{ receta.get_estado_display }}</small>
             </div>
             <div class="d-flex gap-2">
-              {% if receta.pdf %}<a href="{{ receta.pdf.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">Ver PDF</a>{% endif %}
+              {% if receta.pdf %}<a href="{{ receta.pdf.url }}" target="_blank" class="btn btn-sm btn-outline-secondary">Ver documento</a>{% endif %}
               <a href="{% url 'renovar_receta' receta.id %}" class="btn btn-sm btn-primary">Renovar</a>
             </div>
           </div>

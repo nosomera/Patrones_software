@@ -149,6 +149,11 @@ class Cita(models.Model):
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default="agendada")
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_modificacion = models.DateTimeField(auto_now=True)
+    sala_id = models.CharField(max_length=100, blank=True)
+    url_medico = models.URLField(blank=True)
+    url_paciente = models.URLField(blank=True)
+    proveedor_videollamada = models.CharField(max_length=30, blank=True)
+
 
     def __str__(self):
         return f"Cita {self.paciente} con {self.medico} - {self.fecha} {self.hora}"

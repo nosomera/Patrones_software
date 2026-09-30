@@ -17,11 +17,18 @@
               <h6 class="mb-1 fw-bold">{{ cita.paciente.usuario.nombre_completo }}</h6>
               <small class="text-muted">{{ cita.fecha }} · {{ cita.hora }} · {{ cita.get_tipo_display }}</small>
             </div>
-            {% if cita.estado != "atendida" %}
-              <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">Atender</a>
-            {% else %}
-              <span class="badge bg-success">Atendida</span>
-            {% endif %}
+            <div class="d-flex align-items-center gap-2">
+              {% if cita.tipo == "virtual" and cita.url_medico %}
+                <a href="{{ cita.url_medico }}" target="_blank" class="btn btn-sm btn-success">
+                  Iniciar videollamada ({{ cita.proveedor_videollamada|upper }})
+                </a>
+              {% endif %}
+              {% if cita.estado != "atendida" %}
+                <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">Atender</a>
+              {% else %}
+                <span class="badge bg-success">Atendida</span>
+              {% endif %}
+            </div>
           </div>
         {% endfor %}
       </div>

@@ -259,7 +259,6 @@ def atender_cita_view(request, cita_id):
 # ---------------------------------------------------------------------
 # Prescripción / Recetas
 # ---------------------------------------------------------------------
-
 @login_required
 def prescribir_view(request, consulta_id):
     consulta = get_object_or_404(Consulta, pk=consulta_id, cita__medico=request.user.perfil_medico)
@@ -267,6 +266,7 @@ def prescribir_view(request, consulta_id):
 
     if request.method == "POST" and formset.is_valid():
         builder = RecetaBuilder(consulta)
+        formato = request.POST.get("formato", "pdf")
         try:
             for f in formset:
                 datos = f.cleaned_data
@@ -281,8 +281,8 @@ def prescribir_view(request, consulta_id):
                     cantidad=datos["cantidad_total"],
                     indicaciones=datos.get("indicaciones", ""),
                 )
-            receta = builder.generar_receta()
-            messages.success(request, f"Receta {receta.folio} generada correctamente")
+            receta = builder.generar_receta(formato=formato)
+            messages.success(request, f"Receta {receta.folio} generada correctamente ({formato.upper()})")
             return redirect("historial_recetas", paciente_id=consulta.cita.paciente.pk)
         except ValueError as e:
             messages.error(request, str(e))

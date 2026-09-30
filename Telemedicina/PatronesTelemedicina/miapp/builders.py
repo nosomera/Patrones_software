@@ -1,7 +1,10 @@
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from .abstract_factories import RecetaMedicaFactory, generar_folio_receta
+
+from .abstract_factories import generar_folio_receta
+from .bridge import RecetaDocumento, RenderizadorPDF, RenderizadorHTML
+
 from .models import Consulta, DetalleReceta, Receta
 from .singleton import ConfiguracionSistema
 
@@ -69,27 +72,34 @@ class RecetaBuilder:
         print(f"[Builder] Paso: agregar_medicamento -> {medicamento}")
         return self
 
-    def generar_receta(self) -> Receta:
-        if not self._medicamentos:
-            raise ValueError("La receta debe tener al menos un medicamento")
+def generar_receta(self, formato: str = "pdf") -> Receta:
+    if not self._medicamentos:
+        raise ValueError("La receta debe tener al menos un medicamento")
 
-        config = ConfiguracionSistema()
-        ahora = timezone.now()
-        receta = Receta.objects.create(
-            consulta=self._consulta,
-            folio=generar_folio_receta(),
-            fecha_expiracion=config.fecha_expiracion_receta(ahora),
-        )
-        detalles = [DetalleReceta.objects.create(receta=receta, **datos) for datos in self._medicamentos]
+    config = ConfiguracionSistema()
+    ahora = timezone.now()
+    receta = Receta.objects.create(
+        consulta=self._consulta,
+        folio=generar_folio_receta(),
+        fecha_expiracion=config.fecha_expiracion_receta(ahora),
+    )
+    detalles = [DetalleReceta.objects.create(receta=receta, **datos) for datos in self._medicamentos]
 
-        contexto = {
-            "folio": receta.folio,
-            "paciente": self._consulta.cita.paciente,
-            "medico": self._consulta.cita.medico,
-            "detalles": detalles,
-        }
-        pdf_bytes = RecetaMedicaFactory().generar_documento(contexto)
-        receta.pdf.save(f"{receta.folio}.pdf", ContentFile(pdf_bytes), save=True)
+    contexto = {
+        "folio": receta.folio,
+        "paciente": self._consulta.cita.paciente,
+        "medico": self._consulta.cita.medico,
+        "detalles": detalles,
+    }
 
-        print(f"[Builder] Receta {receta.folio} generada con {len(detalles)} medicamento(s)")
-        return receta
+    # --- Aquí está el Bridge en acción ---
+    # RecetaDocumento (la Abstracción) no sabe nada de PDF ni de HTML.
+    # Solo recibe un RenderizadorDocumento y le delega el trabajo.
+    renderizador = RenderizadorHTML() if formato == "html" else RenderizadorPDF()
+    documento_bytes = RecetaDocumento(renderizador).generar(contexto)
+
+    extension = "html" if formato == "html" else "pdf"
+    receta.pdf.save(f"{receta.folio}.{extension}", ContentFile(documento_bytes), save=True)
+
+    print(f"[Builder] Receta {receta.folio} generada en {formato.upper()} con {len(detalles)} medicamento(s)")
+    return receta
