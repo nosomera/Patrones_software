@@ -15,6 +15,7 @@ from .forms import (
 from .models import Cita, Consulta, Paciente, Receta
 from .prototypes import RecetaPrototype
 from .singleton import ConfiguracionSistema, GestorMedicinas
+from .composite import construir_expediente
 
 
 # ---------------------------------------------------------------------
@@ -316,3 +317,12 @@ def renovar_receta_view(request, receta_id):
         f"nuevo folio {receta_nueva.folio} (PK {receta_nueva.pk})"
     )
     return redirect("historial_recetas", paciente_id=paciente.pk)
+
+@login_required
+def expediente_view(request, paciente_id):
+    paciente = get_object_or_404(Paciente, pk=paciente_id)
+    if request.user.tipo_usuario == "paciente" and request.user.perfil_paciente.pk != paciente.pk:
+        return redirect("post_login_redirect")
+
+    expediente = construir_expediente(paciente)
+    return render(request, "expediente.html", {"expediente": expediente, "paciente": paciente})

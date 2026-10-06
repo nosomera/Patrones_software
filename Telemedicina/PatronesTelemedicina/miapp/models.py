@@ -86,9 +86,18 @@ class Paciente(models.Model):
     tipo_sangre = models.CharField(max_length=5, blank=True)
     contacto_emergencia = models.CharField(max_length=100, blank=True)
     ciudad_residencia = models.CharField(max_length=100, blank=True)
+    alergias = models.TextField(blank=True, help_text="Separadas por coma, ej: penicilina, ibuprofeno")  # ← nuevo
 
     def __str__(self):
         return str(self.usuario)
+    
+    def lista_alergias(self) -> list:
+        """Convierte el texto guardado ('penicilina, ibuprofeno') en una
+        lista limpia (['penicilina', 'ibuprofeno']), lista para que el
+        Decorator la use directamente."""
+        if not self.alergias:
+            return []
+        return [a.strip() for a in self.alergias.split(",") if a.strip()]
 
 
 class Medico(models.Model):
@@ -101,6 +110,7 @@ class Medico(models.Model):
 
     def __str__(self):
         return f"Dr(a). {self.usuario.nombre_completo} - {self.especialidad}"
+
 
 
 class Medicina(models.Model):

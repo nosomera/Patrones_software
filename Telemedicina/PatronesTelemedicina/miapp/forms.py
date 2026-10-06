@@ -19,7 +19,6 @@ class LoginForm(BootstrapFormMixin, forms.Form):
     cedula = forms.CharField(max_length=20, label="Cédula")
     password = forms.CharField(widget=forms.PasswordInput, label="Contraseña")
 
-
 class RegistroPacienteForm(forms.Form):
     cedula = forms.CharField(max_length=20, label="Cédula")
     password = forms.CharField(widget=forms.PasswordInput, label="Contraseña")
@@ -34,13 +33,18 @@ class RegistroPacienteForm(forms.Form):
     tipo_sangre = forms.CharField(max_length=5, required=False)
     contacto_emergencia = forms.CharField(max_length=100, required=False)
     ciudad_residencia = forms.CharField(max_length=100, required=False)
+    alergias = forms.CharField(
+        max_length=255, required=False,
+        label="Alergias",
+        widget=forms.TextInput(attrs={"placeholder": "Ej: penicilina, ibuprofeno"}),
+        help_text="Separa cada alergia con una coma. Déjalo vacío si no tiene.",
+    )
 
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("password") and cleaned.get("password") != cleaned.get("password2"):
             raise forms.ValidationError("Las contraseñas no coinciden")
         return cleaned
-
 
 class RegistroMedicoForm(forms.Form):
     cedula = forms.CharField(max_length=20, label="Cédula")

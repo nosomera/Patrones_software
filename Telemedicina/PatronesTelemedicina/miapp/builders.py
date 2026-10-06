@@ -1,12 +1,11 @@
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
-
 from .abstract_factories import generar_folio_receta
 from .bridge import RecetaDocumento, RenderizadorPDF, RenderizadorHTML
-
 from .models import Consulta, DetalleReceta, Receta
 from .singleton import ConfiguracionSistema
+from .decoradores import SelloUrgenteDecorator, NotaAlergiasDecorator
 
 
 class ConsultaBuilder:
@@ -53,8 +52,9 @@ class ConsultaBuilder:
 
 
 class RecetaBuilder:
-    """Agrega medicamentos uno por uno y, al finalizar, delega en la
-    Abstract Factory la generación del PDF con QR y firma."""
+    """Agrega medicamentos uno por uno y, al finalizar, delega en el
+    Bridge (RecetaDocumento + Renderizador) la generación del documento,
+    opcionalmente envuelto con decoradores (urgente, alergias)."""
 
     def __init__(self, consulta):
         self._consulta = consulta
@@ -72,34 +72,49 @@ class RecetaBuilder:
         print(f"[Builder] Paso: agregar_medicamento -> {medicamento}")
         return self
 
-def generar_receta(self, formato: str = "pdf") -> Receta:
-    if not self._medicamentos:
-        raise ValueError("La receta debe tener al menos un medicamento")
+    def generar_receta(self, formato: str = "pdf", es_urgente: bool = False) -> Receta:
+        if not self._medicamentos:
+            raise ValueError("La receta debe tener al menos un medicamento")
 
-    config = ConfiguracionSistema()
-    ahora = timezone.now()
-    receta = Receta.objects.create(
-        consulta=self._consulta,
-        folio=generar_folio_receta(),
-        fecha_expiracion=config.fecha_expiracion_receta(ahora),
-    )
-    detalles = [DetalleReceta.objects.create(receta=receta, **datos) for datos in self._medicamentos]
+        config = ConfiguracionSistema()
+        ahora = timezone.now()
+        receta = Receta.objects.create(
+            consulta=self._consulta,
+            folio=generar_folio_receta(),
+            fecha_expiracion=config.fecha_expiracion_receta(ahora),
+        )
+        detalles = [DetalleReceta.objects.create(receta=receta, **datos) for datos in self._medicamentos]
 
-    contexto = {
-        "folio": receta.folio,
-        "paciente": self._consulta.cita.paciente,
-        "medico": self._consulta.cita.medico,
-        "detalles": detalles,
-    }
+        paciente = self._consulta.cita.paciente
+        contexto = {
+            "folio": receta.folio,
+            "paciente": paciente,
+            "medico": self._consulta.cita.medico,
+            "detalles": detalles,
+            "paciente_alergias": self._obtener_alergias(paciente),
+        }
 
-    # --- Aquí está el Bridge en acción ---
-    # RecetaDocumento (la Abstracción) no sabe nada de PDF ni de HTML.
-    # Solo recibe un RenderizadorDocumento y le delega el trabajo.
-    renderizador = RenderizadorHTML() if formato == "html" else RenderizadorPDF()
-    documento_bytes = RecetaDocumento(renderizador).generar(contexto)
+        # --- Bridge: elige el renderizador según el formato ---
+        renderizador = RenderizadorHTML() if formato == "html" else RenderizadorPDF()
+        documento = RecetaDocumento(renderizador)
 
-    extension = "html" if formato == "html" else "pdf"
-    receta.pdf.save(f"{receta.folio}.{extension}", ContentFile(documento_bytes), save=True)
+        # --- Decorator: envuelve el documento con capas opcionales ---
+        if es_urgente:
+            documento = SelloUrgenteDecorator(documento)
+        if contexto["paciente_alergias"]:
+            documento = NotaAlergiasDecorator(documento)
 
-    print(f"[Builder] Receta {receta.folio} generada en {formato.upper()} con {len(detalles)} medicamento(s)")
-    return receta
+        documento_bytes = documento.generar(contexto)
+
+        extension = "html" if formato == "html" else "pdf"
+        receta.pdf.save(f"{receta.folio}.{extension}", ContentFile(documento_bytes), save=True)
+
+        print(f"[Builder] Receta {receta.folio} generada en {formato.upper()} "
+              f"(urgente={es_urgente}) con {len(detalles)} medicamento(s)")
+        return receta
+
+    def _obtener_alergias(self, paciente) -> list:
+        """Usa el campo real del modelo Paciente (lista_alergias) para
+        que NotaAlergiasDecorator se active automáticamente cuando el
+        paciente tenga alergias registradas."""
+        return paciente.lista_alergias()

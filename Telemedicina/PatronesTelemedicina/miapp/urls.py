@@ -15,6 +15,8 @@ urlpatterns = [
     path("dashboard/paciente/", views.dashboard_paciente, name="dashboard_paciente"),
     path("dashboard/medico/", views.dashboard_medico, name="dashboard_medico"),
     
+    path("expediente/<int:paciente_id>/", views.expediente_view, name="expediente"),
+    
     path("citas/agendar/", views.agendar_cita_view, name="agendar_cita"),
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),

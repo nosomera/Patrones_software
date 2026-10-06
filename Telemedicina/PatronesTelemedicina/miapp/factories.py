@@ -39,6 +39,7 @@ class PacienteCreator(UsuarioCreator):
             tipo_sangre=datos.get("tipo_sangre", ""),
             contacto_emergencia=datos.get("contacto_emergencia", ""),
             ciudad_residencia=datos.get("ciudad_residencia", ""),
+            alergias=datos.get("alergias", ""), 
         )
         return usuario
 
