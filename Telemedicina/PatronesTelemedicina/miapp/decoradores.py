@@ -27,6 +27,13 @@ class DocumentoClinicoDecorator(DocumentoClinico):
         # reenvía la pregunta al documento de adentro. Cada decorador
         # concreto sobreescribe esto para agregar su propia marca.
         return self._documento.crear_contenido(contexto)
+    
+    @property
+    def _renderizador(self):
+        # Pasa la pregunta hacia adentro: si el documento envuelto es
+        # otro decorador, él a su vez la pasa al siguiente, hasta llegar
+        # al RecetaDocumento real que sí tiene el renderizador.
+        return self._documento._renderizador
 
     def generar(self, contexto: dict) -> bytes:
         # Reemplaza el generar() del padre: en vez de usar su propio

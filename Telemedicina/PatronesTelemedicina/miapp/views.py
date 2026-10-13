@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
-from .builders import ConsultaBuilder, RecetaBuilder
+from .builders import ConsultaBuilder  
 from .factories import CitaFactory, UsuarioFactory
 from .forms import (
     AgendarCitaForm, ConsultaForm, LoginForm, ReagendarCitaForm,
@@ -16,6 +16,7 @@ from .models import Cita, Consulta, Paciente, Receta
 from .prototypes import RecetaPrototype
 from .singleton import ConfiguracionSistema, GestorMedicinas
 from .composite import construir_expediente
+from .facades import RecetasFacade
 
 
 # ---------------------------------------------------------------------
@@ -260,35 +261,29 @@ def atender_cita_view(request, cita_id):
 # ---------------------------------------------------------------------
 # Prescripción / Recetas
 # ---------------------------------------------------------------------
+
 @login_required
 def prescribir_view(request, consulta_id):
     consulta = get_object_or_404(Consulta, pk=consulta_id, cita__medico=request.user.perfil_medico)
     formset = RecetaFormSet(request.POST or None, prefix="med")
 
     if request.method == "POST" and formset.is_valid():
-        builder = RecetaBuilder(consulta)
         formato = request.POST.get("formato", "pdf")
+        es_urgente = request.POST.get("es_urgente") == "on"
+        medicamentos = [
+            f.cleaned_data for f in formset
+            if f.cleaned_data and f.cleaned_data.get("medicamento")
+        ]
         try:
-            for f in formset:
-                datos = f.cleaned_data
-                if not datos or not datos.get("medicamento"):
-                    continue
-                builder.agregar_medicamento(
-                    medicamento=datos["medicamento"],
-                    dosis=datos["dosis"],
-                    via=datos["via_administracion"],
-                    frecuencia=datos["frecuencia"],
-                    duracion=datos["duracion_tratamiento"],
-                    cantidad=datos["cantidad_total"],
-                    indicaciones=datos.get("indicaciones", ""),
-                )
-            receta = builder.generar_receta(formato=formato)
-            messages.success(request, f"Receta {receta.folio} generada correctamente ({formato.upper()})")
+            receta = RecetasFacade().emitir_receta(consulta, medicamentos, formato, es_urgente)
+            etiqueta = " (URGENTE)" if es_urgente else ""
+            messages.success(request, f"Receta {receta.folio} generada correctamente ({formato.upper()}){etiqueta}")
             return redirect("historial_recetas", paciente_id=consulta.cita.paciente.pk)
         except ValueError as e:
             messages.error(request, str(e))
 
     return render(request, "prescribir.html", {"formset": formset, "consulta": consulta})
+
 
 
 @login_required
@@ -309,7 +304,7 @@ def renovar_receta_view(request, receta_id):
     if request.user.tipo_usuario == "paciente" and request.user.perfil_paciente.pk != paciente.pk:
         return redirect("post_login_redirect")
 
-    receta_nueva = RecetaPrototype.clonar(receta_original, receta_original.consulta)
+    receta_nueva = RecetasFacade().renovar_receta(receta_original)
 
     messages.success(
         request,
