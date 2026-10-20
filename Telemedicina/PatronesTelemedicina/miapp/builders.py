@@ -82,6 +82,7 @@ class RecetaBuilder:
             consulta=self._consulta,
             folio=generar_folio_receta(),
             fecha_expiracion=config.fecha_expiracion_receta(ahora),
+             es_urgente=es_urgente,
         )
         detalles = [DetalleReceta.objects.create(receta=receta, **datos) for datos in self._medicamentos]
 

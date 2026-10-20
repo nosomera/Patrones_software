@@ -2,15 +2,36 @@
 Patrón Facade: ofrece una puerta de entrada simple (RecetasFacade) para
 operar con recetas, escondiendo la coordinación de Builder, Bridge,
 Decorator, Prototype y Singleton. Las vistas ya no conocen esas clases:
-solo le piden al Facade "emite una receta" o "renueva esta receta".
+solo le piden al Facade "emite una receta", "renueva esta receta" o
+"dame el documento de esta receta".
 No reemplaza ninguna clase existente, solo se coloca por delante.
 """
+from abc import ABC, abstractmethod
 
 from .builders import RecetaBuilder
-from .prototypes import RecetaPrototype   # si tu archivo se llama prototype.py, cambia a .prototype
+from .prototypes import RecetaPrototype
+from .bridge import RecetaDocumento, RenderizadorPDF, RenderizadorHTML
+from .decoradores import SelloUrgenteDecorator, NotaAlergiasDecorator
 
 
-class RecetasFacade:
+class RecetasServicio(ABC):
+    """Interfaz común: tanto el Facade real como el Proxy la cumplen,
+    por eso las vistas pueden usar cualquiera de los dos sin cambios."""
+
+    @abstractmethod
+    def emitir_receta(self, consulta, medicamentos, formato="pdf", es_urgente=False):
+        pass
+
+    @abstractmethod
+    def renovar_receta(self, receta_original, formato=None):
+        pass
+
+    @abstractmethod
+    def obtener_documento(self, receta, formato="pdf"):
+        pass
+
+
+class RecetasFacade(RecetasServicio):
 
     def emitir_receta(self, consulta, medicamentos: list, formato: str = "pdf", es_urgente: bool = False):
         """Emite una receta nueva.
@@ -45,6 +66,32 @@ class RecetasFacade:
             formato = self._formato_de(receta_original)
         print(f"[Facade] renovar_receta -> {receta_original.folio} en {formato.upper()}")
         return RecetaPrototype.clonar(receta_original, receta_original.consulta, formato=formato)
+
+    def obtener_documento(self, receta, formato: str = "pdf"):
+        """Arma el documento de una receta ya guardada, en el formato pedido.
+        Devuelve (contenido_en_bytes, tipo_de_contenido)."""
+        cita = receta.consulta.cita
+        paciente = cita.paciente
+        contexto = {
+            "folio": receta.folio,
+            "paciente": paciente,
+            "medico": cita.medico,
+            "detalles": list(receta.detalles.select_related("medicamento")),
+            "paciente_alergias": paciente.lista_alergias(),
+        }
+
+        # Bridge: el formato decide el renderizador
+        renderizador = RenderizadorHTML() if formato == "html" else RenderizadorPDF()
+        documento = RecetaDocumento(renderizador)
+
+        # Decorator: mismas capas opcionales que al emitir
+        if receta.es_urgente:
+            documento = SelloUrgenteDecorator(documento)
+        if contexto["paciente_alergias"]:
+            documento = NotaAlergiasDecorator(documento)
+
+        tipo = "text/html; charset=utf-8" if formato == "html" else "application/pdf"
+        return documento.generar(contexto), tipo
 
     @staticmethod
     def _formato_de(receta) -> str:

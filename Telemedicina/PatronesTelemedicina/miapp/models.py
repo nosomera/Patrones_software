@@ -209,6 +209,7 @@ class Receta(models.Model):
     fecha_expiracion = models.DateTimeField()
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default="emitida")
     pdf = models.FileField(upload_to="recetas/", null=True, blank=True)
+    es_urgente = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Receta {self.folio}"

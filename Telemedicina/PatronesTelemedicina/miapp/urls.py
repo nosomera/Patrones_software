@@ -14,6 +14,8 @@ urlpatterns = [
     path("redirigir/", views.post_login_redirect, name="post_login_redirect"),
     path("dashboard/paciente/", views.dashboard_paciente, name="dashboard_paciente"),
     path("dashboard/medico/", views.dashboard_medico, name="dashboard_medico"),
+    path("recetas/emitidas/", views.recetas_emitidas_view, name="recetas_emitidas"),
+    path("recetas/<int:receta_id>/ver/<slug:formato>/", views.ver_receta_view, name="ver_receta"),
     
     path("expediente/<int:paciente_id>/", views.expediente_view, name="expediente"),
     

@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from .abstract_factories import RecetaMedicaFactory, ConstanciaAtencionFactory
 from .singleton import GeneradorDocumentosPDF
 
+from html import escape 
 
 # ---------------------------------------------------------------------
 # IMPLEMENTACIÓN (lado "B" del puente): CÓMO se renderiza el documento
@@ -38,19 +39,13 @@ class RenderizadorPDF(RenderizadorDocumento):
 
 
 class RenderizadorHTML(RenderizadorDocumento):
-    """Segundo renderizador, totalmente independiente del PDF.
-    Se puede agregar sin tocar ni una línea de RenderizadorPDF ni de
-    las clases de documento (RecetaDocumento, ConstanciaDocumento).
-    Esa independencia es justamente lo que demuestra que el patrón
-    está funcionando."""
-
     def renderizar(self, titulo: str, lineas: list) -> bytes:
-        cuerpo_html = "".join(f"<p>{linea}</p>\n" for linea in lineas)
+        cuerpo_html = "".join(f"<p>{escape(linea)}</p>\n" for linea in lineas)
         html = f"""<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="utf-8"><title>{titulo}</title></head>
+<head><meta charset="utf-8"><title>{escape(titulo)}</title></head>
 <body>
-    <h1>{titulo}</h1>
+    <h1>{escape(titulo)}</h1>
     {cuerpo_html}
 </body>
 </html>"""

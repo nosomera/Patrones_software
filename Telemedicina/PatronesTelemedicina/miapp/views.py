@@ -6,6 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
+from django.http import Http404, HttpResponse
+
 from .builders import ConsultaBuilder  
 from .factories import CitaFactory, UsuarioFactory
 from .forms import (
@@ -17,6 +19,8 @@ from .prototypes import RecetaPrototype
 from .singleton import ConfiguracionSistema, GestorMedicinas
 from .composite import construir_expediente
 from .facades import RecetasFacade
+
+from .proxies import AccesoDenegado, RecetasProxy
 
 
 # ---------------------------------------------------------------------
@@ -275,43 +279,43 @@ def prescribir_view(request, consulta_id):
             if f.cleaned_data and f.cleaned_data.get("medicamento")
         ]
         try:
-            receta = RecetasFacade().emitir_receta(consulta, medicamentos, formato, es_urgente)
+            receta = RecetasProxy(request.user).emitir_receta(consulta, medicamentos, formato, es_urgente)
             etiqueta = " (URGENTE)" if es_urgente else ""
             messages.success(request, f"Receta {receta.folio} generada correctamente ({formato.upper()}){etiqueta}")
             return redirect("historial_recetas", paciente_id=consulta.cita.paciente.pk)
+        except AccesoDenegado as e:
+            messages.error(request, str(e))
         except ValueError as e:
             messages.error(request, str(e))
 
     return render(request, "prescribir.html", {"formset": formset, "consulta": consulta})
 
-
-
 @login_required
 def historial_recetas_view(request, paciente_id):
     paciente = get_object_or_404(Paciente, pk=paciente_id)
-    if request.user.tipo_usuario == "paciente" and request.user.perfil_paciente.pk != paciente.pk:
+    try:
+        RecetasProxy(request.user).verificar_acceso_paciente(paciente)
+    except AccesoDenegado:
         return redirect("post_login_redirect")
 
     recetas = Receta.objects.filter(consulta__cita__paciente=paciente).order_by("-fecha_emision")
     return render(request, "historial_recetas.html", {"recetas": recetas, "paciente": paciente})
 
-
 @login_required
 def renovar_receta_view(request, receta_id):
     receta_original = get_object_or_404(Receta, pk=receta_id)
-    paciente = receta_original.consulta.cita.paciente
-
-    if request.user.tipo_usuario == "paciente" and request.user.perfil_paciente.pk != paciente.pk:
+    try:
+        receta_nueva = RecetasProxy(request.user).renovar_receta(receta_original)
+    except AccesoDenegado as e:
+        messages.error(request, str(e))
         return redirect("post_login_redirect")
-
-    receta_nueva = RecetasFacade().renovar_receta(receta_original)
 
     messages.success(
         request,
-        f"Receta renovada: folio original {receta_original.folio} (PK {receta_original.pk}) → "
-        f"nuevo folio {receta_nueva.folio} (PK {receta_nueva.pk})"
+        f"Receta renovada: folio original {receta_original.folio} → nuevo folio {receta_nueva.folio}"
     )
-    return redirect("historial_recetas", paciente_id=paciente.pk)
+    return redirect("recetas_emitidas")
+
 
 @login_required
 def expediente_view(request, paciente_id):
@@ -321,3 +325,26 @@ def expediente_view(request, paciente_id):
 
     expediente = construir_expediente(paciente)
     return render(request, "expediente.html", {"expediente": expediente, "paciente": paciente})
+
+@login_required
+def ver_receta_view(request, receta_id, formato):
+    if formato not in ("pdf", "html"):
+        raise Http404
+    receta = get_object_or_404(Receta, pk=receta_id)
+    try:
+        contenido, tipo = RecetasProxy(request.user).obtener_documento(receta, formato)
+    except AccesoDenegado:
+        return redirect("post_login_redirect")
+    return HttpResponse(contenido, content_type=tipo)
+
+@login_required
+def recetas_emitidas_view(request):
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
+    recetas = (
+        Receta.objects
+        .filter(consulta__cita__medico=request.user.perfil_medico)
+        .select_related("consulta__cita__paciente__usuario")
+        .order_by("-fecha_emision")
+    )
+    return render(request, "recetas_emitidas.html", {"recetas": recetas})
