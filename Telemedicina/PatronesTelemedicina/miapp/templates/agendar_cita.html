@@ -1,11 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Agendar cita{% endblock %}
+
 {% block content %}
 <h1 class="fw-bold text-primary mb-4">Agendar cita</h1>
-<div class="card shadow-sm border-0">
+
+<div class="card shadow-sm border-0 mb-4">
   <div class="card-body p-4">
+    <h4 class="card-title mb-3 text-secondary">1. Busca un horario</h4>
     <form method="post" novalidate>
       {% csrf_token %}
+      <input type="hidden" name="accion" value="buscar">
       {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
       <div class="row">
         <div class="col-md-6">{% include "_form_field.html" with field=form.especialidad %}</div>
@@ -13,11 +17,47 @@
         <div class="col-md-6">{% include "_form_field.html" with field=form.sede %}</div>
         <div class="col-md-6">{% include "_form_field.html" with field=form.medico %}</div>
         <div class="col-md-6">{% include "_form_field.html" with field=form.fecha %}</div>
-        <div class="col-md-6">{% include "_form_field.html" with field=form.hora %}</div>
         <div class="col-12">{% include "_form_field.html" with field=form.motivo_consulta %}</div>
       </div>
-      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Agendar</button>
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Buscar horarios</button>
     </form>
   </div>
 </div>
+
+{% if franjas is not None %}
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <h4 class="card-title mb-3 text-secondary">2. Elige uno</h4>
+    {% if franjas %}
+      <div class="list-group list-group-flush border-top">
+        {% for f in franjas %}
+          <form method="post" class="list-group-item d-flex justify-content-between align-items-center py-3">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="confirmar">
+            <input type="hidden" name="medico" value="{{ f.medico.pk }}">
+            <input type="hidden" name="fecha" value="{{ f.fecha|date:'Y-m-d' }}">
+            <input type="hidden" name="hora" value="{{ f.hora|time:'H:i' }}">
+            <input type="hidden" name="tipo" value="{{ busqueda.tipo }}">
+            <input type="hidden" name="sede" value="{% if busqueda.tipo == 'presencial' %}{{ f.sede.pk }}{% endif %}">
+            <input type="hidden" name="motivo_consulta" value="{{ busqueda.motivo_consulta }}">
+            <div>
+              <h6 class="mb-1 fw-bold">
+                Dr(a). {{ f.medico.usuario.nombre_completo }}
+                {% if forloop.first %}<span class="badge bg-success ms-2">Más próxima</span>{% endif %}
+              </h6>
+              <small class="text-muted">
+                {{ f.fecha|date:"l d/m/Y" }} · {{ f.hora|time:"H:i" }} ·
+                {% if busqueda.tipo == "virtual" %}Virtual (videollamada){% else %}{{ f.sede }}{% endif %}
+              </small>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary">Agendar</button>
+          </form>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info mb-0">No hay horarios libres con esos criterios. Prueba con otra fecha, otro médico o deja la fecha vacía.</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}

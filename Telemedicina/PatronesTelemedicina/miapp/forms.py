@@ -2,6 +2,7 @@ from django import forms
 
 from .models import Especialidad
 from .models import Cita, DetalleReceta, Especialidad, Medico, Medicina, Sede
+from datetime import date
 
 class BootstrapFormMixin:
     def __init__(self, *args, **kwargs):
@@ -65,21 +66,41 @@ class RegistroMedicoForm(forms.Form):
         return cleaned
     
 
-
-class AgendarCitaForm(BootstrapFormMixin, forms.Form):
+class BuscarHorariosForm(BootstrapFormMixin, forms.Form):
     especialidad = forms.ModelChoiceField(queryset=Especialidad.objects.all())
     tipo = forms.ChoiceField(choices=Cita.TIPO_CHOICES)
-    sede = forms.ModelChoiceField(queryset=Sede.objects.all(), required=False, label="Sede (obligatoria si es presencial)")
-    medico = forms.ModelChoiceField(queryset=Medico.objects.all())
-    fecha = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
-    hora = forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}))
-    motivo_consulta = forms.CharField(widget=forms.Textarea, required=False, label="Motivo de consulta")
+    sede = forms.ModelChoiceField(
+        queryset=Sede.objects.all(), required=False, label="Sede (obligatoria si es presencial)"
+    )
+    medico = forms.ModelChoiceField(
+        queryset=Medico.objects.all(), required=False, empty_label="Cualquiera", label="Médico (opcional)"
+    )
+    fecha = forms.DateField(
+        required=False, widget=forms.DateInput(attrs={"type": "date"}),
+        label="Fecha (déjala vacía para 'lo antes posible')",
+    )
+    motivo_consulta = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False, label="Motivo de consulta")
 
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("tipo") == "presencial" and not cleaned.get("sede"):
             raise forms.ValidationError("Debes elegir una sede para citas presenciales")
+        medico, especialidad = cleaned.get("medico"), cleaned.get("especialidad")
+        if medico and especialidad and medico.especialidad_id != especialidad.id:
+            raise forms.ValidationError("El médico elegido no pertenece a esa especialidad")
+        if cleaned.get("fecha") and cleaned["fecha"] < date.today():
+            raise forms.ValidationError("La fecha no puede estar en el pasado")
         return cleaned
+
+
+class ConfirmarFranjaForm(forms.Form):
+    """Recibe los campos ocultos del horario que el paciente eligió."""
+    medico = forms.ModelChoiceField(queryset=Medico.objects.all())
+    fecha = forms.DateField()
+    hora = forms.TimeField()
+    tipo = forms.ChoiceField(choices=Cita.TIPO_CHOICES)
+    sede = forms.ModelChoiceField(queryset=Sede.objects.all(), required=False)
+    motivo_consulta = forms.CharField(required=False)
 
 
 class ReagendarCitaForm(BootstrapFormMixin, forms.Form):

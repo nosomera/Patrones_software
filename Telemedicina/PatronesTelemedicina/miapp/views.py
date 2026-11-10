@@ -1,27 +1,25 @@
-from datetime import date as date_cls, datetime, timedelta
+from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 
-from django.http import Http404, HttpResponse
-
-from .builders import ConsultaBuilder  
-from .factories import CitaFactory, UsuarioFactory
-from .forms import (
-    AgendarCitaForm, ConsultaForm, LoginForm, ReagendarCitaForm,
-    RecetaFormSet, RegistroMedicoForm, RegistroPacienteForm,
-)
-from .models import Cita, Consulta, Paciente, Receta
-from .prototypes import RecetaPrototype
-from .singleton import ConfiguracionSistema, GestorMedicinas
+from .builders import ConsultaBuilder
 from .composite import construir_expediente
 from .facades import RecetasFacade
-
+from .factories import CitaFactory, UsuarioFactory
+from .forms import (
+    BuscarHorariosForm, ConfirmarFranjaForm, ConsultaForm, LoginForm,
+    ReagendarCitaForm, RecetaFormSet, RegistroMedicoForm, RegistroPacienteForm,
+)
+from .iterators import AgendaCitasMedico, AgendaMedico, buscar_franjas
+from .models import Cita, Consulta, Medico, Paciente, Receta
+from .prototypes import RecetaPrototype
 from .proxies import AccesoDenegado, RecetasProxy
-
+from .singleton import ConfiguracionSistema, GestorMedicinas
 
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
@@ -152,31 +150,66 @@ def dashboard_medico(request):
 # Citas (paciente)
 # ---------------------------------------------------------------------
 
+
 @login_required
 def agendar_cita_view(request):
     if request.user.tipo_usuario != "paciente":
         return redirect("post_login_redirect")
 
-    form = AgendarCitaForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        datos = form.cleaned_data
-        try:
-            creator = CitaFactory.obtener_creator(datos["tipo"])
-            cita = creator.crear_cita({
-                "paciente_id": request.user.perfil_paciente.pk,
-                "medico_id": datos["medico"].pk,
-                "especialidad_id": datos["especialidad"].pk,
-                "sede_id": datos["sede"].pk if datos.get("sede") else None,
-                "fecha": datos["fecha"],
-                "hora": datos["hora"],
-                "motivo_consulta": datos.get("motivo_consulta", ""),
-            })
-            messages.success(request, f"Cita agendada para el {cita.fecha} a las {cita.hora}")
-            return redirect("listar_citas")
-        except ValueError as e:
-            form.add_error(None, str(e))
+    if request.method == "POST" and request.POST.get("accion") == "confirmar":
+        return _confirmar_cita(request)
 
-    return render(request, "agendar_cita.html", {"form": form})
+    form = BuscarHorariosForm(request.POST or None)
+    franjas, busqueda = None, None
+
+    if request.method == "POST" and form.is_valid():
+        busqueda = form.cleaned_data
+        if busqueda["medico"]:
+            medicos = [busqueda["medico"]]
+        else:
+            medicos = Medico.objects.filter(especialidad=busqueda["especialidad"]).select_related("usuario")
+        sede = busqueda["sede"] if busqueda["tipo"] == "presencial" else None
+        franjas = buscar_franjas(medicos, sede=sede, fecha=busqueda["fecha"], cantidad=12)
+
+    return render(request, "agendar_cita.html", {"form": form, "franjas": franjas, "busqueda": busqueda})
+
+
+def _confirmar_cita(request):
+    form = ConfirmarFranjaForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Los datos del horario elegido no son válidos")
+        return redirect("agendar_cita")
+
+    datos = form.cleaned_data
+    medico = datos["medico"]
+    sede = datos["sede"] if datos["tipo"] == "presencial" else None
+
+    if datos["tipo"] == "presencial" and not sede:
+        messages.error(request, "Una cita presencial necesita sede")
+        return redirect("agendar_cita")
+
+    # Se vuelve a validar: otro paciente pudo tomar el horario mientras este decidía
+    if not AgendaMedico.franja_disponible(medico, datos["fecha"], datos["hora"], sede):
+        messages.error(request, "Ese horario acaba de ocuparse. Busca de nuevo y elige otro.")
+        return redirect("agendar_cita")
+
+    try:
+        creator = CitaFactory.obtener_creator(datos["tipo"])
+        cita = creator.crear_cita({
+            "paciente_id": request.user.perfil_paciente.pk,
+            "medico_id": medico.pk,
+            "especialidad_id": medico.especialidad_id,
+            "sede_id": sede.pk if sede else None,
+            "fecha": datos["fecha"],
+            "hora": datos["hora"],
+            "motivo_consulta": datos.get("motivo_consulta", ""),
+        })
+    except ValueError as e:
+        messages.error(request, str(e))
+        return redirect("agendar_cita")
+
+    messages.success(request, f"Cita agendada para el {cita.fecha} a las {cita.hora:%H:%M}")
+    return redirect("listar_citas")
 
 
 @login_required
@@ -185,7 +218,6 @@ def listar_citas_view(request):
         return redirect("post_login_redirect")
     citas = Cita.objects.filter(paciente=request.user.perfil_paciente).order_by("-fecha", "-hora")
     return render(request, "listar_citas.html", {"citas": citas})
-
 
 @login_required
 def reagendar_cita_view(request, cita_id):
@@ -199,12 +231,14 @@ def reagendar_cita_view(request, cita_id):
 
     form = ReagendarCitaForm(request.POST or None, initial={"fecha": cita.fecha, "hora": cita.hora})
     if request.method == "POST" and form.is_valid():
-        cita.fecha = form.cleaned_data["fecha"]
-        cita.hora = form.cleaned_data["hora"]
-        cita.estado = "reagendada"
-        cita.save()
-        messages.success(request, "Cita reagendada correctamente")
-        return redirect("listar_citas")
+        nueva_fecha, nueva_hora = form.cleaned_data["fecha"], form.cleaned_data["hora"]
+        if not AgendaMedico.franja_disponible(cita.medico, nueva_fecha, nueva_hora, cita.sede):
+            form.add_error(None, "Ese horario no está disponible para este médico. Elige otro dentro de su agenda.")
+        else:
+            cita.fecha, cita.hora, cita.estado = nueva_fecha, nueva_hora, "reagendada"
+            cita.save()
+            messages.success(request, "Cita reagendada correctamente")
+            return redirect("listar_citas")
 
     return render(request, "reagendar_cita.html", {"form": form, "cita": cita})
 
@@ -213,27 +247,18 @@ def reagendar_cita_view(request, cita_id):
 # Citas y atención (médico)
 # ---------------------------------------------------------------------
 
+
 @login_required
 def citas_medico_view(request):
     if request.user.tipo_usuario != "medico":
         return redirect("post_login_redirect")
 
     periodo = request.GET.get("periodo", "dia")
-    hoy = date_cls.today()
-    if periodo == "semana":
-        inicio = hoy - timedelta(days=hoy.weekday())
-        fin = inicio + timedelta(days=6)
-    elif periodo == "mes":
-        inicio = hoy.replace(day=1)
-        fin = (inicio.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-    else:
-        inicio = fin = hoy
+    agenda = AgendaCitasMedico(request.user.perfil_medico, periodo)
+    dias = [(dia, citas) for dia, citas in agenda if citas or periodo == "dia"]
 
-    citas = Cita.objects.filter(
-        medico=request.user.perfil_medico, fecha__range=[inicio, fin]
-    ).select_related("paciente__usuario").order_by("fecha", "hora")
+    return render(request, "citas_medico.html", {"dias": dias, "periodo": periodo})
 
-    return render(request, "citas_medico.html", {"citas": citas, "periodo": periodo})
 
 
 @login_required

@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 
 from django.db import transaction
 
-from .models import Cita, Especialidad, Medico, Paciente, Sede, Usuario
-
-from .adapters import obtener_proveedor_videollamada
+from .models import Cita, DisponibilidadMedica, Especialidad, Medico, Paciente, Sede, Usuario
 from .singleton import ConfiguracionSistema
+from .adapters import obtener_proveedor_videollamada
+
 
 # ---------------------------------------------------------------------
 # Factory Method #1: Usuario (paciente / médico) — usado en el registro
@@ -43,7 +43,6 @@ class PacienteCreator(UsuarioCreator):
         )
         return usuario
 
-
 class MedicoCreator(UsuarioCreator):
     @transaction.atomic
     def crear_usuario(self, datos: dict) -> Usuario:
@@ -60,14 +59,37 @@ class MedicoCreator(UsuarioCreator):
             fecha_nacimiento=datos.get("fecha_nacimiento"),
         )
         especialidad = Especialidad.objects.get(pk=datos["especialidad_id"])
-        Medico.objects.create(
+        medico = Medico.objects.create(
             usuario=usuario,
             especialidad=especialidad,
             numero_tarjeta_profesional=datos.get("numero_tarjeta_profesional", ""),
             telefono=datos.get("telefono", ""),
         )
+        self._crear_disponibilidad_inicial(medico)
         return usuario
 
+    @staticmethod
+    def _crear_disponibilidad_inicial(medico: Medico) -> None:
+        """Deja al médico atendiendo desde el primer día, con las reglas
+        del Singleton ConfiguracionSistema. Se puede correr varias veces
+        sin duplicar filas."""
+        config = ConfiguracionSistema()
+        sede, _ = Sede.objects.get_or_create(
+            nombre=config.sede_defecto_nombre,
+            ciudad=config.sede_defecto_ciudad,
+            defaults={"direccion": config.sede_defecto_direccion},
+        )
+        for dia in config.dias_laborales_defecto:
+            DisponibilidadMedica.objects.get_or_create(
+                medico=medico,
+                sede=sede,
+                dia_semana=dia,
+                defaults={
+                    "hora_inicio": config.horario_defecto_inicio,
+                    "hora_fin": config.horario_defecto_fin,
+                    "duracion_turno_minutos": config.duracion_turno_defecto,
+                },
+            )
 
 class UsuarioFactory:
     """Decide qué Creator usar según el tipo de usuario (Factory Method)."""

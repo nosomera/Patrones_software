@@ -60,6 +60,22 @@ class ConfiguracionSistema:
 
     def fecha_expiracion_receta(self, fecha_emision: datetime) -> datetime:
         return fecha_emision + timedelta(days=self.dias_expiracion_receta)
+    
+    def _inicializar(self):
+        self.horas_minimas_reagendar = 24
+        self.dias_expiracion_receta = 30
+        self.horas_anticipacion_agendar = 2   # NUEVO: no se agenda con menos de 2h de anticipación
+        self.dias_ventana_agenda = 14         # NUEVO: cuántos días hacia adelante se ofrecen horarios
+        self.tamanio_maximo_archivo_mb = 10
+        self.formatos_permitidos = ["pdf", "jpg", "png"]
+        self.sede_defecto_nombre = "Sede Cabecera"
+        self.sede_defecto_ciudad = "Bucaramanga"
+        self.sede_defecto_direccion = "Calle 51 # 35-20"
+        self.dias_laborales_defecto = [0, 1, 2, 3, 4]   # lunes a viernes
+        self.horario_defecto_inicio = "08:00"
+        self.horario_defecto_fin = "16:00"
+        self.duracion_turno_defecto = 30
+        self.proveedor_videollamada_por_defecto = "jitsi"
 
 
 class GeneradorDocumentosPDF:
@@ -110,3 +126,4 @@ class GeneradorDocumentosPDF:
         pdf.save()
         buffer.seek(0)
         return buffer.getvalue()
+    
