@@ -106,7 +106,7 @@ class ConfirmarFranjaForm(forms.Form):
 class ReagendarCitaForm(BootstrapFormMixin, forms.Form):
     fecha = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     hora = forms.TimeField(widget=forms.TimeInput(attrs={"type": "time"}))
-
+    motivo = forms.CharField(max_length=255, required=False, label="Motivo del cambio (opcional)")
 
 class ConsultaForm(BootstrapFormMixin, forms.Form):
     motivo_consulta = forms.CharField(widget=forms.Textarea, label="Motivo de consulta")

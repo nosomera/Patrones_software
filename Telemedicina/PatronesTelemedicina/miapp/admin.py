@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from .models import VersionBorrador, HistorialReagendamiento
 
 from .models import (
     Usuario, Especialidad, Paciente, Medico, Medicina,
@@ -37,3 +38,5 @@ admin.site.register(DisponibilidadMedica)
 admin.site.register(Consulta)
 admin.site.register(Receta)
 admin.site.register(DetalleReceta)
+admin.site.register(VersionBorrador)
+admin.site.register(HistorialReagendamiento)

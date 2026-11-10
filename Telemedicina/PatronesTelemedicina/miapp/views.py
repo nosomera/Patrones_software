@@ -1,11 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, HttpResponse
+from django.db import transaction
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .builders import ConsultaBuilder
 from .composite import construir_expediente
@@ -16,6 +19,7 @@ from .forms import (
     ReagendarCitaForm, RecetaFormSet, RegistroMedicoForm, RegistroPacienteForm,
 )
 from .iterators import AgendaCitasMedico, AgendaMedico, buscar_franjas
+from .mementos import BorradorConsulta, CitaReagendable, HistorialBorradores, HistorialReagendamientos
 from .models import Cita, Consulta, Medico, Paciente, Receta
 from .prototypes import RecetaPrototype
 from .proxies import AccesoDenegado, RecetasProxy
@@ -235,8 +239,13 @@ def reagendar_cita_view(request, cita_id):
         if not AgendaMedico.franja_disponible(cita.medico, nueva_fecha, nueva_hora, cita.sede):
             form.add_error(None, "Ese horario no está disponible para este médico. Elige otro dentro de su agenda.")
         else:
-            cita.fecha, cita.hora, cita.estado = nueva_fecha, nueva_hora, "reagendada"
-            cita.save()
+            with transaction.atomic():
+                originator = CitaReagendable(cita)
+                memento = originator.crear_memento()            # 1. foto del estado anterior
+                originator.reagendar(nueva_fecha, nueva_hora)   # 2. se aplica el cambio
+                HistorialReagendamientos(cita).registrar(       # 3. se archiva la foto
+                    memento, request.user, form.cleaned_data.get("motivo", "")
+                )
             messages.success(request, "Cita reagendada correctamente")
             return redirect("listar_citas")
 
@@ -260,32 +269,89 @@ def citas_medico_view(request):
     return render(request, "citas_medico.html", {"dias": dias, "periodo": periodo})
 
 
-
 @login_required
 def atender_cita_view(request, cita_id):
-    cita = get_object_or_404(Cita, pk=cita_id, medico=request.user.perfil_medico)
-    consulta_existente = getattr(cita, "consulta", None)
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
 
-    form = ConsultaForm(request.POST or None, initial={
-        "motivo_consulta": consulta_existente.motivo_consulta if consulta_existente else cita.motivo_consulta,
-        "enfermedad_actual": consulta_existente.enfermedad_actual if consulta_existente else "",
-        "diagnostico": consulta_existente.diagnostico if consulta_existente else "",
+    medico = request.user.perfil_medico
+    cita = get_object_or_404(Cita, pk=cita_id, medico=medico)
+    consulta_existente = Consulta.objects.filter(cita=cita).first()
+
+    # Regla: una consulta firmada no se vuelve a abrir para editarla
+    if consulta_existente and consulta_existente.firmada:
+        messages.info(request, "Esta consulta ya fue firmada y no se puede modificar.")
+        return redirect("prescribir", consulta_id=consulta_existente.id)
+
+    historial = HistorialBorradores(cita, medico)
+    form = None
+
+    if request.method == "POST":
+        accion = request.POST.get("accion", "finalizar")
+
+        if accion == "guardar_borrador":
+            borrador = BorradorConsulta(
+                request.POST.get("motivo_consulta", ""),
+                request.POST.get("enfermedad_actual", ""),
+                request.POST.get("diagnostico", ""),
+            )
+            if historial.guardar(borrador.crear_memento("manual"), omitir_si_igual=True):
+                messages.success(request, "Borrador guardado")
+            else:
+                messages.info(request, "No hay cambios nuevos desde el último borrador")
+            return redirect("atender_cita", cita_id=cita.id)
+
+        if accion == "restaurar":
+            memento = historial.obtener(request.POST.get("version_id"))
+            if memento is None:
+                messages.error(request, "No se encontró esa versión")
+            else:
+                borrador = BorradorConsulta()
+                borrador.restaurar(memento)
+                historial.guardar(borrador.crear_memento("restaurado"))
+                messages.success(request, "Versión restaurada")
+            return redirect("atender_cita", cita_id=cita.id)
+
+        # accion == "finalizar"
+        form = ConsultaForm(request.POST)
+        if form.is_valid():
+            datos = form.cleaned_data
+            historial.guardar(BorradorConsulta(**datos).crear_memento("firmada"))
+            consulta = (
+                ConsultaBuilder(cita)
+                .agregar_motivo(datos["motivo_consulta"])
+                .agregar_anamnesis(datos["enfermedad_actual"])
+                .agregar_diagnostico(datos["diagnostico"])
+                .finalizar_consulta()
+            )
+            messages.success(request, "Consulta guardada correctamente")
+            return redirect("prescribir", consulta_id=consulta.id)
+
+    ultimo = historial.ultimo()
+    aviso_borrador = None
+    if form is None:
+        if ultimo:
+            initial = ultimo.como_dict()
+            if timezone.now() - ultimo.fecha > timedelta(minutes=1):
+                aviso_borrador = ultimo.fecha
+        elif consulta_existente:
+            initial = {
+                "motivo_consulta": consulta_existente.motivo_consulta,
+                "enfermedad_actual": consulta_existente.enfermedad_actual,
+                "diagnostico": consulta_existente.diagnostico,
+            }
+        else:
+            initial = {"motivo_consulta": cita.motivo_consulta}
+        form = ConsultaForm(initial=initial)
+
+    return render(request, "atender_cita.html", {
+        "form": form,
+        "cita": cita,
+        "versiones": historial.listar(),
+        "aviso_borrador": aviso_borrador,
+        "segundos_autoguardado": ConfiguracionSistema().segundos_autoguardado,
     })
-
-    if request.method == "POST" and form.is_valid():
-        builder = ConsultaBuilder(cita)
-        consulta = (
-            builder
-            .agregar_motivo(form.cleaned_data["motivo_consulta"])
-            .agregar_anamnesis(form.cleaned_data["enfermedad_actual"])
-            .agregar_diagnostico(form.cleaned_data["diagnostico"])
-            .finalizar_consulta()
-        )
-        messages.success(request, "Consulta guardada correctamente")
-        return redirect("prescribir", consulta_id=consulta.id)
-
-    return render(request, "atender_cita.html", {"form": form, "cita": cita})
-
+    
 
 # ---------------------------------------------------------------------
 # Prescripción / Recetas
@@ -373,3 +439,43 @@ def recetas_emitidas_view(request):
         .order_by("-fecha_emision")
     )
     return render(request, "recetas_emitidas.html", {"recetas": recetas})
+
+
+
+@login_required
+@require_POST
+def autoguardar_borrador_view(request, cita_id):
+    if request.user.tipo_usuario != "medico":
+        return JsonResponse({"ok": False}, status=403)
+
+    medico = request.user.perfil_medico
+    cita = get_object_or_404(Cita, pk=cita_id, medico=medico)
+    if Consulta.objects.filter(cita=cita, firmada=True).exists():
+        return JsonResponse({"ok": False, "error": "consulta firmada"}, status=409)
+
+    borrador = BorradorConsulta(
+        request.POST.get("motivo_consulta", ""),
+        request.POST.get("enfermedad_actual", ""),
+        request.POST.get("diagnostico", ""),
+    )
+    if borrador.esta_vacio():
+        return JsonResponse({"ok": True, "guardado": False})
+
+    version = HistorialBorradores(cita, medico).guardar(borrador.crear_memento("auto"), omitir_si_igual=True)
+    return JsonResponse({
+        "ok": True,
+        "guardado": version is not None,
+        "hora": timezone.localtime().strftime("%H:%M"),
+    })
+
+
+@login_required
+def historial_cambios_cita_view(request, cita_id):
+    cita = get_object_or_404(Cita, pk=cita_id)
+    es_paciente = request.user.tipo_usuario == "paciente" and cita.paciente_id == request.user.perfil_paciente.pk
+    es_medico = request.user.tipo_usuario == "medico" and cita.medico_id == request.user.perfil_medico.pk
+    if not (es_paciente or es_medico):
+        raise Http404
+
+    cambios = HistorialReagendamientos(cita).listar()
+    return render(request, "historial_cambios.html", {"cita": cita, "cambios": cambios, "es_medico": es_medico})

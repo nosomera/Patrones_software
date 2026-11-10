@@ -230,3 +230,42 @@ class DetalleReceta(models.Model):
 
     def __str__(self):
         return f"{self.medicamento} - {self.dosis}"
+    
+class VersionBorrador(models.Model):
+    ORIGEN_CHOICES = [
+        ("manual", "Guardado manual"),
+        ("auto", "Autoguardado"),
+        ("restaurado", "Versión restaurada"),
+        ("firmada", "Versión firmada"),
+    ]
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name="versiones_borrador")
+    medico = models.ForeignKey(Medico, on_delete=models.CASCADE, related_name="versiones_borrador")
+    motivo_consulta = models.TextField(blank=True)
+    enfermedad_actual = models.TextField(blank=True)
+    diagnostico = models.TextField(blank=True)
+    origen = models.CharField(max_length=12, choices=ORIGEN_CHOICES, default="manual")
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"Borrador cita #{self.cita_id} - {self.fecha:%d/%m/%Y %H:%M} ({self.origen})"
+
+
+class HistorialReagendamiento(models.Model):
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name="historial_reagendamientos")
+    fecha_anterior = models.DateField()
+    hora_anterior = models.TimeField()
+    estado_anterior = models.CharField(max_length=20)
+    fecha_nueva = models.DateField()
+    hora_nueva = models.TimeField()
+    motivo = models.CharField(max_length=255, blank=True)
+    usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name="reagendamientos")
+    fecha_cambio = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_cambio", "-id"]
+
+    def __str__(self):
+        return f"Cita #{self.cita_id}: {self.fecha_anterior} -> {self.fecha_nueva}"

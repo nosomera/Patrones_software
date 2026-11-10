@@ -43,12 +43,6 @@ class ConfiguracionSistema:
             cls._instancia._inicializar()
         return cls._instancia
 
-    def _inicializar(self):
-        self.horas_minimas_reagendar = 24
-        self.dias_expiracion_receta = 30
-        self.tamanio_maximo_archivo_mb = 10
-        self.formatos_permitidos = ["pdf", "jpg", "png"]
-        self.proveedor_videollamada_por_defecto = "zoom" 
 
     def puede_reagendar(self, fecha_hora_cita: datetime) -> bool:
         """
@@ -75,7 +69,9 @@ class ConfiguracionSistema:
         self.horario_defecto_inicio = "08:00"
         self.horario_defecto_fin = "16:00"
         self.duracion_turno_defecto = 30
-        self.proveedor_videollamada_por_defecto = "jitsi"
+        self.proveedor_videollamada_por_defecto = "zoom"
+        self.max_versiones_borrador = 10
+        self.segundos_autoguardado = 60
 
 
 class GeneradorDocumentosPDF:

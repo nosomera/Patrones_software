@@ -1,17 +1,86 @@
-  {% extends "base.html" %}
-  {% block title %}Atender cita{% endblock %}
-  {% block content %}
-  <h1 class="fw-bold text-primary mb-1">Atender a {{ cita.paciente.usuario.nombre_completo }}</h1>
-  <p class="text-muted mb-4">{{ cita.fecha }} · {{ cita.hora }} · {{ cita.get_tipo_display }}</p>
-  <div class="card shadow-sm border-0">
-    <div class="card-body p-4">
-      <form method="post" novalidate>
-        {% csrf_token %}
-        {% include "_form_field.html" with field=form.motivo_consulta %}
-        {% include "_form_field.html" with field=form.enfermedad_actual %}
-        {% include "_form_field.html" with field=form.diagnostico %}
-        <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Guardar y continuar a prescripción</button>
-      </form>
+{% extends "base.html" %}
+{% block title %}Atender cita{% endblock %}
+
+{% block content %}
+<h1 class="fw-bold text-primary mb-1">Atender a {{ cita.paciente.usuario.nombre_completo }}</h1>
+<p class="text-muted mb-4">{{ cita.fecha|date:"d/m/Y" }} · {{ cita.hora|time:"H:i" }} · {{ cita.get_tipo_display }}</p>
+
+{% if aviso_borrador %}
+  <div class="alert alert-info">Recuperamos tu borrador, guardado hace {{ aviso_borrador|timesince }}.</div>
+{% endif %}
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <form method="post" id="form-consulta" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+      {% include "_form_field.html" with field=form.motivo_consulta %}
+      {% include "_form_field.html" with field=form.enfermedad_actual %}
+      {% include "_form_field.html" with field=form.diagnostico %}
+
+      <div class="d-flex gap-2 mt-2">
+        <button type="submit" name="accion" value="guardar_borrador" class="btn btn-outline-primary">Guardar borrador</button>
+        <button type="submit" name="accion" value="finalizar" class="btn btn-primary flex-grow-1 fw-bold">Guardar y continuar a prescripción</button>
+      </div>
+      <div class="form-text mt-2" id="estado-autoguardado">
+        Se guarda un borrador automáticamente cada {{ segundos_autoguardado }} segundos si hay cambios.
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if versiones %}
+<div class="card shadow-sm border-0 mt-4">
+  <div class="card-body p-4">
+    <h5 class="text-secondary mb-3">Versiones guardadas</h5>
+    <div class="list-group list-group-flush">
+      {% for v in versiones %}
+        <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+          <div>
+            <span class="fw-semibold">{{ v.fecha|date:"d/m/Y H:i" }}</span>
+            <span class="badge bg-secondary ms-2">{{ v.get_origen_display }}</span>
+            <div class="text-muted small">{{ v.diagnostico|default:v.enfermedad_actual|default:v.motivo_consulta|truncatechars:80 }}</div>
+          </div>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="restaurar">
+            <input type="hidden" name="version_id" value="{{ v.id }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Restaurar</button>
+          </form>
+        </div>
+      {% endfor %}
     </div>
   </div>
-  {% endblock %}
+</div>
+{% endif %}
+
+<script>
+(function () {
+  const form = document.getElementById("form-consulta");
+  const estado = document.getElementById("estado-autoguardado");
+  const url = "{% url 'autoguardar_borrador' cita.id %}";
+  const intervalo = {{ segundos_autoguardado }} * 1000;
+  let ultimoEnviado = new URLSearchParams(new FormData(form)).toString();
+
+  setInterval(async function () {
+    const datos = new FormData(form);
+    const actual = new URLSearchParams(datos).toString();
+    if (actual === ultimoEnviado) return;
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        body: datos,
+        headers: {"X-CSRFToken": datos.get("csrfmiddlewaretoken")},
+      });
+      const j = await r.json();
+      if (j.ok) {
+        ultimoEnviado = actual;
+        if (j.guardado) estado.textContent = "Borrador guardado automáticamente a las " + j.hora;
+      }
+    } catch (e) {
+      estado.textContent = "No se pudo autoguardar (sin conexión)";
+    }
+  }, intervalo);
+})();
+</script>
+{% endblock %}

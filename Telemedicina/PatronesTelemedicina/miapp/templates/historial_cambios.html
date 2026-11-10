@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Historial de cambios{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="fw-bold text-primary fs-3 mb-0">Historial de cambios</h1>
+  <a href="{% if es_medico %}{% url 'citas_medico' %}{% else %}{% url 'listar_citas' %}{% endif %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+<p class="text-muted">
+  Cita con {% if es_medico %}{{ cita.paciente.usuario.nombre_completo }}{% else %}Dr(a). {{ cita.medico.usuario.nombre_completo }}{% endif %}
+  · actualmente el {{ cita.fecha|date:"d/m/Y" }} a las {{ cita.hora|time:"H:i" }}
+</p>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <div class="list-group list-group-flush">
+      {% for c in cambios %}
+        <div class="list-group-item py-3">
+          <div class="fw-semibold">{{ c.fecha_cambio|date:"d/m/Y H:i" }} · {{ c.usuario.nombre_completo }}</div>
+          <div class="small">
+            Antes: <span class="text-decoration-line-through text-muted">{{ c.fecha_anterior|date:"d/m/Y" }} {{ c.hora_anterior|time:"H:i" }}</span>
+            → Ahora: <strong>{{ c.fecha_nueva|date:"d/m/Y" }} {{ c.hora_nueva|time:"H:i" }}</strong>
+          </div>
+          {% if c.motivo %}<div class="small text-muted">Motivo: {{ c.motivo }}</div>{% endif %}
+        </div>
+      {% empty %}
+        <div class="alert alert-info mb-0">Esta cita no ha cambiado de fecha.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
