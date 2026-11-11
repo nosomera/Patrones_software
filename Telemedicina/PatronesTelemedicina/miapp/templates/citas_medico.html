@@ -15,16 +15,23 @@
       {% if citas %}
         <div class="list-group list-group-flush">
           {% for cita in citas %}
-            <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+            <div class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
               <div>
                 <h6 class="mb-1 fw-bold">{{ cita.paciente.usuario.nombre_completo }}</h6>
                 <small class="text-muted">{{ cita.hora|time:"H:i" }} · {{ cita.get_tipo_display }}</small>
               </div>
-              {% if cita.estado != "atendida" %}
-                <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">Atender</a>
-              {% else %}
-                <span class="badge bg-success">Atendida</span>
-              {% endif %}
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                {% if cita.estado == "atendida" %}
+                  <span class="badge bg-success">Atendida</span>
+                {% else %}
+                  <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">Atender</a>
+                  <a href="{% url 'cancelar_cita' cita.id %}" class="btn btn-sm btn-outline-danger">Cancelar</a>
+                {% endif %}
+                {% if cita.estado == "reagendada" %}
+                  <a href="{% url 'historial_cambios_cita' cita.id %}" class="btn btn-sm btn-outline-secondary">Historial</a>
+                {% endif %}
+                <a href="{% url 'chat_cita' cita.id %}" class="btn btn-sm btn-outline-primary">💬 Chat</a>
+              </div>
             </div>
           {% endfor %}
         </div>

@@ -123,5 +123,10 @@ class MedicamentoRecetaForm(BootstrapFormMixin, forms.Form):
     cantidad_total = forms.CharField(max_length=50, required=False)
     indicaciones = forms.CharField(widget=forms.Textarea, required=False)
 
+class CancelarCitaForm(BootstrapFormMixin, forms.Form):
+    motivo = forms.CharField(
+        max_length=255, required=False, widget=forms.Textarea(attrs={"rows": 3}),
+        label="Motivo de la cancelación", help_text="Obligatorio si quien cancela es el médico.",
+    )
 
 RecetaFormSet = forms.formset_factory(MedicamentoRecetaForm, extra=3)

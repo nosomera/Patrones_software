@@ -2,9 +2,10 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from .models import VersionBorrador, HistorialReagendamiento
 
+
 from .models import (
     Usuario, Especialidad, Paciente, Medico, Medicina,
-    Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta,
+    Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta,Notificacion,MensajeChat
 )
 
 
@@ -40,3 +41,5 @@ admin.site.register(Receta)
 admin.site.register(DetalleReceta)
 admin.site.register(VersionBorrador)
 admin.site.register(HistorialReagendamiento)
+admin.site.register(Notificacion)
+admin.site.register(MensajeChat)

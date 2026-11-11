@@ -10,28 +10,27 @@
     {% if citas %}
       <div class="list-group list-group-flush">
         {% for cita in citas %}
-          <div class="list-group-item d-flex justify-content-between align-items-center py-3">
-            <div>
-              <h6 class="mb-1 fw-bold">Dr(a). {{ cita.medico.usuario.nombre_completo }} — {{ cita.especialidad }}</h6>
-              <small class="text-muted">{{ cita.fecha }} · {{ cita.hora }} · {{ cita.get_tipo_display }}{% if cita.sede %} · {{ cita.sede }}{% endif %}</small>
+          <div class="list-group-item py-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div>
+                <h6 class="mb-1 fw-bold">Dr(a). {{ cita.medico.usuario.nombre_completo }} — {{ cita.especialidad }}</h6>
+                <small class="text-muted">{{ cita.fecha|date:"d/m/Y" }} · {{ cita.hora|time:"H:i" }} · {{ cita.get_tipo_display }}{% if cita.sede %} · {{ cita.sede }}{% endif %}</small>
+              </div>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge {% if cita.estado == 'cancelada' %}bg-danger{% elif cita.estado == 'atendida' %}bg-success{% else %}bg-secondary{% endif %}">{{ cita.get_estado_display }}</span>
+                {% if cita.estado == "agendada" or cita.estado == "reagendada" %}
+                  <a href="{% url 'reagendar_cita' cita.id %}" class="btn btn-sm btn-outline-primary">Reagendar</a>
+                  <a href="{% url 'cancelar_cita' cita.id %}" class="btn btn-sm btn-outline-danger">Cancelar</a>
+                {% endif %}
+                {% if cita.estado == "reagendada" %}
+                  <a href="{% url 'historial_cambios_cita' cita.id %}" class="btn btn-sm btn-outline-secondary">Historial</a>
+                {% endif %}
+                <a href="{% url 'chat_cita' cita.id %}" class="btn btn-sm btn-outline-primary">💬 Chat</a>
+              </div>
             </div>
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge bg-secondary">{{ cita.get_estado_display }}</span>
-              {% if cita.estado == "agendada" or cita.estado == "reagendada" %}
-                <a href="{% url 'reagendar_cita' cita.id %}" class="btn btn-sm btn-outline-primary">Reagendar</a>
-              {% endif %}
-
-              {% if cita.estado == "reagendada" %}
-              <a href="{% url 'historial_cambios_cita' cita.id %}" class="btn btn-sm btn-outline-secondary">Historial</a>
-              {% endif %}
-
-
-              {% if cita.tipo == "virtual" and cita.url_paciente %}
-                <a href="{{ cita.url_paciente }}" target="_blank" class="btn btn-sm btn-success">
-                  Unirse a videollamada ({{ cita.proveedor_videollamada|upper }})
-                </a>
-              {% endif %}
-            </div>
+            {% if cita.estado == "cancelada" and cita.motivo_cancelacion %}
+              <div class="small text-muted mt-1">Motivo de la cancelación: {{ cita.motivo_cancelacion }}</div>
+            {% endif %}
           </div>
         {% endfor %}
       </div>

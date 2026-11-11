@@ -72,6 +72,10 @@ class ConfiguracionSistema:
         self.proveedor_videollamada_por_defecto = "zoom"
         self.max_versiones_borrador = 10
         self.segundos_autoguardado = 60
+        self.horas_minimas_cancelar = 24
+        self.dias_chat_abierto = 7
+        self.max_caracteres_mensaje = 1000
+        self.segundos_refresco_chat = 5
 
 
 class GeneradorDocumentosPDF:

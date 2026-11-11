@@ -16,6 +16,12 @@
                 <span class="text-white-50 small d-none d-sm-inline">
                     {{ request.user.nombre_completo }} · {{ request.user.get_tipo_usuario_display }}
                 </span>
+
+                <a href="{% url 'notificaciones' %}" class="btn btn-sm btn-outline-light">
+                    🔔{% if notificaciones_sin_leer %} <span class="badge bg-danger">{{ notificaciones_sin_leer }}</span>{% endif %}
+                </a>
+
+
                 <a href="{% url 'logout' %}" class="btn btn-sm btn-outline-light">Cerrar sesión</a>
             </div>
         </div>

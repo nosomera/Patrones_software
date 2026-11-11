@@ -24,6 +24,13 @@ urlpatterns = [
     path("medico/citas/<int:cita_id>/borrador/", views.autoguardar_borrador_view, name="autoguardar_borrador"),
     path("citas/<int:cita_id>/historial/", views.historial_cambios_cita_view, name="historial_cambios_cita"),
     
+    path("citas/<int:cita_id>/cancelar/", views.cancelar_cita_view, name="cancelar_cita"),
+    path("citas/<int:cita_id>/chat/", views.chat_cita_view, name="chat_cita"),
+    path("citas/<int:cita_id>/chat/mensajes/", views.chat_mensajes_view, name="chat_mensajes"),
+    path("citas/<int:cita_id>/chat/enviar/", views.chat_enviar_view, name="chat_enviar"),
+    path("notificaciones/", views.notificaciones_view, name="notificaciones"),
+    path("notificaciones/<int:notificacion_id>/abrir/", views.abrir_notificacion_view, name="abrir_notificacion"),
+    
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),
 path("medico/citas/", views.citas_medico_view, name="citas_medico"),
@@ -32,3 +39,4 @@ path("consultas/<int:consulta_id>/prescribir/", views.prescribir_view, name="pre
 path("pacientes/<int:paciente_id>/recetas/", views.historial_recetas_view, name="historial_recetas"),
 path("recetas/<int:receta_id>/renovar/", views.renovar_receta_view, name="renovar_receta"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

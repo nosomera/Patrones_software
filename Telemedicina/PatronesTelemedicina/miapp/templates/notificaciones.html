@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Notificaciones{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="fw-bold text-primary mb-0">Notificaciones</h1>
+  {% if notificaciones_sin_leer %}
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-primary btn-sm">Marcar todas como leídas</button>
+    </form>
+  {% endif %}
+</div>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <div class="list-group list-group-flush">
+      {% for n in notificaciones %}
+        <a href="{% url 'abrir_notificacion' n.id %}" class="list-group-item list-group-item-action py-3 {% if not n.leida %}fw-semibold{% endif %}">
+          <div class="d-flex justify-content-between align-items-start gap-3">
+            <span>{% if not n.leida %}<span class="badge bg-primary me-2">Nueva</span>{% endif %}{{ n.mensaje }}</span>
+            <small class="text-muted text-nowrap">{{ n.fecha|date:"d/m/Y H:i" }}</small>
+          </div>
+        </a>
+      {% empty %}
+        <div class="alert alert-info mb-0">No tienes notificaciones.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

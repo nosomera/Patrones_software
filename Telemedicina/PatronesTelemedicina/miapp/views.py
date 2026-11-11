@@ -15,15 +15,16 @@ from .composite import construir_expediente
 from .facades import RecetasFacade
 from .factories import CitaFactory, UsuarioFactory
 from .forms import (
-    BuscarHorariosForm, ConfirmarFranjaForm, ConsultaForm, LoginForm,
+    BuscarHorariosForm, CancelarCitaForm, ConfirmarFranjaForm, ConsultaForm, LoginForm,
     ReagendarCitaForm, RecetaFormSet, RegistroMedicoForm, RegistroPacienteForm,
 )
 from .iterators import AgendaCitasMedico, AgendaMedico, buscar_franjas
 from .mementos import BorradorConsulta, CitaReagendable, HistorialBorradores, HistorialReagendamientos
-from .models import Cita, Consulta, Medico, Paciente, Receta
+from .models import Cita, Consulta, Medico, Notificacion, Paciente, Receta
 from .prototypes import RecetaPrototype
 from .proxies import AccesoDenegado, RecetasProxy
 from .singleton import ConfiguracionSistema, GestorMedicinas
+from .mediators import ErrorMediador, MediadorCitas, SalaChat, rol_en_cita
 
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
@@ -185,34 +186,21 @@ def _confirmar_cita(request):
         return redirect("agendar_cita")
 
     datos = form.cleaned_data
-    medico = datos["medico"]
-    sede = datos["sede"] if datos["tipo"] == "presencial" else None
-
-    if datos["tipo"] == "presencial" and not sede:
-        messages.error(request, "Una cita presencial necesita sede")
-        return redirect("agendar_cita")
-
-    # Se vuelve a validar: otro paciente pudo tomar el horario mientras este decidía
-    if not AgendaMedico.franja_disponible(medico, datos["fecha"], datos["hora"], sede):
-        messages.error(request, "Ese horario acaba de ocuparse. Busca de nuevo y elige otro.")
-        return redirect("agendar_cita")
-
     try:
-        creator = CitaFactory.obtener_creator(datos["tipo"])
-        cita = creator.crear_cita({
-            "paciente_id": request.user.perfil_paciente.pk,
-            "medico_id": medico.pk,
-            "especialidad_id": medico.especialidad_id,
-            "sede_id": sede.pk if sede else None,
-            "fecha": datos["fecha"],
-            "hora": datos["hora"],
-            "motivo_consulta": datos.get("motivo_consulta", ""),
-        })
-    except ValueError as e:
+        cita = MediadorCitas().agendar_cita(
+            usuario=request.user,
+            medico=datos["medico"],
+            fecha=datos["fecha"],
+            hora=datos["hora"],
+            tipo=datos["tipo"],
+            sede=datos["sede"],
+            motivo=datos.get("motivo_consulta", ""),
+        )
+    except ErrorMediador as e:
         messages.error(request, str(e))
         return redirect("agendar_cita")
 
-    messages.success(request, f"Cita agendada para el {cita.fecha} a las {cita.hora:%H:%M}")
+    messages.success(request, f"Cita agendada para el {cita.fecha:%d/%m/%Y} a las {cita.hora:%H:%M}")
     return redirect("listar_citas")
 
 
@@ -225,31 +213,33 @@ def listar_citas_view(request):
 
 @login_required
 def reagendar_cita_view(request, cita_id):
-    cita = get_object_or_404(Cita, pk=cita_id, paciente=request.user.perfil_paciente)
-    config = ConfiguracionSistema()
-    fecha_hora_actual = datetime.combine(cita.fecha, cita.hora)
+    if request.user.tipo_usuario != "paciente":
+        return redirect("post_login_redirect")
 
-    if not config.puede_reagendar(fecha_hora_actual):
-        messages.error(request, f"Solo puedes reagendar con más de {config.horas_minimas_reagendar} horas de anticipación")
+    cita = get_object_or_404(Cita, pk=cita_id, paciente=request.user.perfil_paciente)
+    mediador = MediadorCitas()
+    try:
+        mediador.validar_reagendar(request.user, cita)
+    except ErrorMediador as e:
+        messages.error(request, str(e))
         return redirect("listar_citas")
 
     form = ReagendarCitaForm(request.POST or None, initial={"fecha": cita.fecha, "hora": cita.hora})
     if request.method == "POST" and form.is_valid():
-        nueva_fecha, nueva_hora = form.cleaned_data["fecha"], form.cleaned_data["hora"]
-        if not AgendaMedico.franja_disponible(cita.medico, nueva_fecha, nueva_hora, cita.sede):
-            form.add_error(None, "Ese horario no está disponible para este médico. Elige otro dentro de su agenda.")
+        try:
+            mediador.reagendar_cita(
+                request.user, cita,
+                form.cleaned_data["fecha"], form.cleaned_data["hora"],
+                form.cleaned_data.get("motivo", ""),
+            )
+        except ErrorMediador as e:
+            form.add_error(None, str(e))
         else:
-            with transaction.atomic():
-                originator = CitaReagendable(cita)
-                memento = originator.crear_memento()            # 1. foto del estado anterior
-                originator.reagendar(nueva_fecha, nueva_hora)   # 2. se aplica el cambio
-                HistorialReagendamientos(cita).registrar(       # 3. se archiva la foto
-                    memento, request.user, form.cleaned_data.get("motivo", "")
-                )
-            messages.success(request, "Cita reagendada correctamente")
+            messages.success(request, "Cita reagendada correctamente. Se avisó al médico.")
             return redirect("listar_citas")
 
     return render(request, "reagendar_cita.html", {"form": form, "cita": cita})
+
 
 
 # ---------------------------------------------------------------------
@@ -479,3 +469,114 @@ def historial_cambios_cita_view(request, cita_id):
 
     cambios = HistorialReagendamientos(cita).listar()
     return render(request, "historial_cambios.html", {"cita": cita, "cambios": cambios, "es_medico": es_medico})
+
+@login_required
+def cancelar_cita_view(request, cita_id):
+    cita = get_object_or_404(Cita.objects.select_related("paciente__usuario", "medico__usuario"), pk=cita_id)
+    if rol_en_cita(cita, request.user) is None:
+        raise Http404
+
+    destino = "citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas"
+    mediador = MediadorCitas()
+    try:
+        mediador.validar_cancelar(request.user, cita)
+    except ErrorMediador as e:
+        messages.error(request, str(e))
+        return redirect(destino)
+
+    form = CancelarCitaForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            mediador.cancelar_cita(request.user, cita, form.cleaned_data["motivo"])
+        except ErrorMediador as e:
+            form.add_error(None, str(e))
+        else:
+            messages.success(request, "Cita cancelada. Se avisó a la otra persona.")
+            return redirect(destino)
+
+    return render(request, "cancelar_cita.html", {"form": form, "cita": cita})
+
+
+@login_required
+def notificaciones_view(request):
+    if request.method == "POST":
+        Notificacion.objects.filter(usuario=request.user, leida=False).update(leida=True)
+        return redirect("notificaciones")
+    lista = Notificacion.objects.filter(usuario=request.user)[:50]
+    return render(request, "notificaciones.html", {"notificaciones": lista})
+
+
+@login_required
+def abrir_notificacion_view(request, notificacion_id):
+    aviso = get_object_or_404(Notificacion, pk=notificacion_id, usuario=request.user)
+    aviso.leida = True
+    aviso.save(update_fields=["leida"])
+    if aviso.tipo == "chat" and aviso.cita_id:
+        return redirect("chat_cita", cita_id=aviso.cita_id)
+    return redirect("citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas")
+
+
+def _sala_o_none(request, cita_id):
+    cita = get_object_or_404(Cita.objects.select_related("paciente__usuario", "medico__usuario"), pk=cita_id)
+    try:
+        return cita, SalaChat(cita, request.user)
+    except ErrorMediador:
+        return cita, None
+
+
+def _mensaje_a_dict(mensaje, usuario):
+    return {
+        "id": mensaje.id,
+        "mio": mensaje.emisor_id == usuario.pk,
+        "contenido": mensaje.contenido,
+        "fecha": timezone.localtime(mensaje.fecha).strftime("%d/%m %H:%M"),
+        "leido": mensaje.leido,
+    }
+
+
+@login_required
+def chat_cita_view(request, cita_id):
+    cita, sala = _sala_o_none(request, cita_id)
+    if sala is None:
+        raise Http404
+
+    sala.abrir_conversacion()
+    mensajes = sala.almacen.listar(cita)
+    config = ConfiguracionSistema()
+    return render(request, "chat_cita.html", {
+        "cita": cita,
+        "mensajes": mensajes,
+        "otro_nombre": sala.otro.usuario.nombre_completo,
+        "abierta": sala.esta_abierta(),
+        "max_caracteres": config.max_caracteres_mensaje,
+        "segundos_refresco": config.segundos_refresco_chat,
+        "ultimo_id": mensajes[-1].id if mensajes else 0,
+        "volver_url": reverse("citas_medico") if request.user.tipo_usuario == "medico" else reverse("listar_citas"),
+    })
+
+
+@login_required
+def chat_mensajes_view(request, cita_id):
+    cita, sala = _sala_o_none(request, cita_id)
+    if sala is None:
+        return JsonResponse({"ok": False}, status=403)
+    try:
+        desde = int(request.GET.get("desde", 0))
+    except ValueError:
+        desde = 0
+    sala.abrir_conversacion()
+    nuevos = sala.almacen.listar(cita, desde)
+    return JsonResponse({"ok": True, "mensajes": [_mensaje_a_dict(m, request.user) for m in nuevos]})
+
+
+@login_required
+@require_POST
+def chat_enviar_view(request, cita_id):
+    cita, sala = _sala_o_none(request, cita_id)
+    if sala is None:
+        return JsonResponse({"ok": False, "error": "No participas en esta conversación"}, status=403)
+    try:
+        sala.enviar(request.POST.get("contenido", ""))
+    except ErrorMediador as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+    return JsonResponse({"ok": True})

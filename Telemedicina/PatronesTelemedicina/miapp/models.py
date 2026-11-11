@@ -163,6 +163,10 @@ class Cita(models.Model):
     url_medico = models.URLField(blank=True)
     url_paciente = models.URLField(blank=True)
     proveedor_videollamada = models.CharField(max_length=30, blank=True)
+    motivo_cancelacion = models.CharField(max_length=255, blank=True)
+    cancelada_por = models.ForeignKey(
+        Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name="citas_canceladas"
+    )
 
 
     def __str__(self):
@@ -269,3 +273,38 @@ class HistorialReagendamiento(models.Model):
 
     def __str__(self):
         return f"Cita #{self.cita_id}: {self.fecha_anterior} -> {self.fecha_nueva}"
+    
+    
+class Notificacion(models.Model):
+    TIPO_CHOICES = [
+        ("cita_agendada", "Cita agendada"),
+        ("cita_reagendada", "Cita reagendada"),
+        ("cita_cancelada", "Cita cancelada"),
+        ("chat", "Mensaje de chat"),
+    ]
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="notificaciones")
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    mensaje = models.CharField(max_length=255)
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, null=True, blank=True, related_name="notificaciones")
+    leida = models.BooleanField(default=False)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"{self.usuario.nombre_completo}: {self.mensaje[:40]}"
+
+
+class MensajeChat(models.Model):
+    cita = models.ForeignKey(Cita, on_delete=models.CASCADE, related_name="mensajes_chat")
+    emisor = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="mensajes_enviados")
+    contenido = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    leido = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["fecha", "id"]
+
+    def __str__(self):
+        return f"Cita #{self.cita_id} - {self.emisor.nombre_completo}: {self.contenido[:30]}"
