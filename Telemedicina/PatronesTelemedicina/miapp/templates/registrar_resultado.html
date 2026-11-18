@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Registrar resultado{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Registrar resultado</h1>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+      <div class="row">
+        <div class="col-md-6">{% include "_form_field.html" with field=form.paciente %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.tipo %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.nombre_examen %}</div>
+        <div class="col-md-6">{% include "_form_field.html" with field=form.fecha_resultado %}</div>
+        <div class="col-12">{% include "_form_field.html" with field=form.archivo %}</div>
+        <div class="col-12">{% include "_form_field.html" with field=form.resultado_texto %}</div>
+        <div class="col-12">{% include "_form_field.html" with field=form.observaciones %}</div>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Registrar y avisar al paciente</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

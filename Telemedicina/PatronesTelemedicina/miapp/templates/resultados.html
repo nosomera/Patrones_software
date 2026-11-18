@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Resultados médicos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="fw-bold text-primary mb-0">Resultados médicos</h1>
+  {% if es_medico %}
+    <a href="{% url 'registrar_resultado' %}" class="btn btn-primary fw-bold">+ Registrar resultado</a>
+  {% endif %}
+</div>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <div class="list-group list-group-flush">
+      {% for r in resultados %}
+        <div class="list-group-item d-flex justify-content-between align-items-center py-3">
+          <div>
+            <h6 class="mb-1 fw-bold">
+              {{ r.nombre_examen }}
+              {% if not es_medico and not r.visto_por_paciente %}<span class="badge bg-primary ms-2">Nuevo</span>{% endif %}
+            </h6>
+            <small class="text-muted">
+              {{ r.get_tipo_display }} · {{ r.fecha_resultado|date:"d/m/Y" }} ·
+              {% if es_medico %}Paciente: {{ r.paciente.usuario.nombre_completo }}{% else %}Dr(a). {{ r.medico.usuario.nombre_completo }}{% endif %}
+            </small>
+          </div>
+          <a href="{% url 'ver_resultado' r.id %}" class="btn btn-sm btn-outline-primary">Ver</a>
+        </div>
+      {% empty %}
+        <div class="alert alert-info mb-0">No hay resultados registrados.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

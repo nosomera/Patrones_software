@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Resultado médico{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="fw-bold text-primary fs-3 mb-0">{{ resultado.nombre_examen }}</h1>
+  <a href="{% url 'resultados' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <p class="text-muted">
+      {{ resultado.get_tipo_display }} · Fecha del resultado: {{ resultado.fecha_resultado|date:"d/m/Y" }} ·
+      {% if es_medico %}Paciente: {{ resultado.paciente.usuario.nombre_completo }}{% else %}Registrado por Dr(a). {{ resultado.medico.usuario.nombre_completo }}{% endif %}
+    </p>
+    {% if resultado.resultado_texto %}
+      <h6 class="text-secondary">Resultado</h6>
+      <div class="mb-3" style="white-space: pre-wrap;">{{ resultado.resultado_texto }}</div>
+    {% endif %}
+    {% if resultado.observaciones %}
+      <h6 class="text-secondary">Observaciones del médico</h6>
+      <div class="mb-3" style="white-space: pre-wrap;">{{ resultado.observaciones }}</div>
+    {% endif %}
+    {% if resultado.archivo %}
+      <a href="{% url 'descargar_resultado' resultado.id %}" target="_blank" class="btn btn-primary">Abrir archivo adjunto</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

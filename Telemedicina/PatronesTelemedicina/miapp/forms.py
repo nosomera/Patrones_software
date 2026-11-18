@@ -1,7 +1,7 @@
 from django import forms
 
 from .models import Especialidad
-from .models import Cita, DetalleReceta, Especialidad, Medico, Medicina, Sede
+from .models import Autorizacion, Cita, DetalleReceta, Especialidad, Medico, Medicina, Paciente, ResultadoMedico, Sede
 from datetime import date
 from .singleton import ConfiguracionSistema
 

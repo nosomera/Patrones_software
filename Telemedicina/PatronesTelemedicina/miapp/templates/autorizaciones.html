@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Autorizaciones{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="fw-bold text-primary mb-0">Autorizaciones</h1>
+  {% if not es_medico %}
+    <a href="{% url 'solicitar_autorizacion' %}" class="btn btn-primary fw-bold">+ Solicitar autorización</a>
+  {% endif %}
+</div>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <div class="list-group list-group-flush">
+      {% for a in autorizaciones %}
+        <div class="list-group-item py-3">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+              <h6 class="mb-1 fw-bold">{{ a.descripcion }}</h6>
+              <small class="text-muted">
+                {{ a.get_tipo_display }} ·
+                {% if es_medico %}Paciente: {{ a.paciente.usuario.nombre_completo }}{% else %}Dr(a). {{ a.medico.usuario.nombre_completo }}{% endif %}
+                · Solicitada el {{ a.fecha_solicitud|date:"d/m/Y" }}
+                {% if a.fecha_vencimiento %}· Vence el {{ a.fecha_vencimiento|date:"d/m/Y" }}{% endif %}
+              </small>
+              {% if a.respuesta %}<div class="small text-muted mt-1">Respuesta: {{ a.respuesta }}</div>{% endif %}
+              {% if a.renovacion_de_id %}<div class="small text-muted">Renovación de la solicitud #{{ a.renovacion_de_id }}</div>{% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-{{ a.color_estado }}">{{ a.etiqueta_estado }}</span>
+              {% if es_medico and a.estado == "pendiente" %}
+                <a href="{% url 'responder_autorizacion' a.id %}" class="btn btn-sm btn-primary">Revisar</a>
+              {% endif %}
+              {% if not es_medico and a.puede_renovar %}
+                <form method="post" action="{% url 'renovar_autorizacion' a.id %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Renovar</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <div class="alert alert-info mb-0">No hay autorizaciones registradas.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

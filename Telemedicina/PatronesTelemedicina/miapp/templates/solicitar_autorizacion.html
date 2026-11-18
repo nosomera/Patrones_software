@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Solicitar autorización{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Solicitar autorización</h1>
+<div class="card shadow-sm border-0" style="max-width: 640px;">
+  <div class="card-body p-4">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+      {% include "_form_field.html" with field=form.medico %}
+      {% include "_form_field.html" with field=form.tipo %}
+      <div id="bloque-medicamento">{% include "_form_field.html" with field=form.medicamento %}</div>
+      <div id="bloque-descripcion">{% include "_form_field.html" with field=form.descripcion %}</div>
+      {% include "_form_field.html" with field=form.motivo %}
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Enviar solicitud</button>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  const tipo = document.getElementById("{{ form.tipo.id_for_label }}");
+  const bloqueMed = document.getElementById("bloque-medicamento");
+  const bloqueDesc = document.getElementById("bloque-descripcion");
+  function ajustar() {
+    const esMed = tipo.value === "medicamento";
+    bloqueMed.style.display = esMed ? "" : "none";
+    bloqueDesc.style.display = esMed ? "none" : "";
+  }
+  tipo.addEventListener("change", ajustar);
+  ajustar();
+})();
+</script>
+{% endblock %}

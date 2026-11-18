@@ -4,7 +4,7 @@
 {% block content %}
 <div class="mb-4">
     <h1 class="fw-bold text-primary fs-3 mb-1">Hola, {{ request.user.nombre_completo }} 👋</h1>
-    <p class="text-muted mb-0">Este es tu panel. Los módulos se irán habilitando a medida que avance el proyecto.</p>
+    
 </div>
 
 <div class="row g-3">
@@ -19,6 +19,7 @@
   <a href="{{ modulo.url }}" class="btn btn-primary btn-sm">Ir</a>
 {% else %}
   <button class="btn btn-outline-secondary btn-sm disabled">Próximamente</button>
+  
 {% endif %}
             </div>
         </div>

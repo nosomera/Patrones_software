@@ -136,8 +136,11 @@ def dashboard_paciente(request):
     modulos = [
         {"icono": "📅", "titulo": "Agendar cita", "descripcion": "Reserva una cita por médico, especialidad, sede y fecha.", "url": reverse("agendar_cita")},
         {"icono": "🗓️", "titulo": "Mis citas", "descripcion": "Consulta tus citas y reagenda si faltan más de 24 horas.", "url": reverse("listar_citas")},
-        {"icono": "📄", "titulo": "Autorizaciones", "descripcion": "Solicita, consulta y renueva tus autorizaciones médicas."},
-        {"icono": "🧪", "titulo": "Resultados médicos", "descripcion": "Revisa los resultados de tus exámenes de laboratorio."},
+        
+        {"icono": "📄", "titulo": "Autorizaciones", "descripcion": "Solicita, consulta y renueva tus autorizaciones médicas.", "url": reverse("autorizaciones")},
+        {"icono": "🧪", "titulo": "Resultados médicos", "descripcion": "Revisa los resultados de tus exámenes.", "url": reverse("resultados")},
+        
+        
         {"icono": "💊", "titulo": "Historial de recetas", "descripcion": "Consulta tus fórmulas médicas y renueva tratamientos crónicos.", "url": reverse("historial_recetas", args=[request.user.perfil_paciente.pk])},
     ]
     return render(request, "dashboard_paciente.html", {"modulos": modulos})
@@ -151,8 +154,8 @@ def dashboard_medico(request):
     modulos = [
         {"icono": "🗓️", "titulo": "Citas del día", "descripcion": "Consulta tus citas de hoy, la semana o el mes.", "url": reverse("citas_medico")},
         {"icono": "🩺", "titulo": "Atender paciente", "descripcion": "Ve a 'Citas del día' y pulsa Atender junto a la cita que corresponda."},
-        {"icono": "💊", "titulo": "Recetas emitidas", "descripcion": "Consulta el historial de fórmulas médicas que has emitido."},
-        {"icono": "📤", "titulo": "Remisiones y órdenes", "descripcion": "Remite pacientes a especialistas u ordena exámenes."},
+        {"icono": "📄", "titulo": "Autorizaciones", "descripcion": "Revisa y responde las solicitudes de tus pacientes.", "url": reverse("autorizaciones")},
+        {"icono": "🧪", "titulo": "Resultados médicos", "descripcion": "Registra resultados y consulta los que ya enviaste.", "url": reverse("resultados")},
     ]
     return render(request, "dashboard_medico.html", {"modulos": modulos})
 

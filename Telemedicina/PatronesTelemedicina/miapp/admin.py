@@ -7,8 +7,14 @@ from .states import RecetaContexto, TransicionInvalida
 
 from .models import (
     Usuario, Especialidad, Paciente, Medico, Medicina,
-    Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta,Notificacion,MensajeChat
+    Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta,Notificacion,MensajeChat,Autorizacion, ResultadoMedico, RegistroAuditoria
 )
+
+@admin.register(RegistroAuditoria)
+class RegistroAuditoriaAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "usuario", "evento", "descripcion", "objeto")
+    list_filter = ("evento",)
+    readonly_fields = ("usuario", "evento", "descripcion", "objeto", "fecha")
 
 
 class UsuarioAdmin(UserAdmin):
@@ -59,3 +65,6 @@ admin.site.register(VersionBorrador)
 admin.site.register(HistorialReagendamiento)
 admin.site.register(Notificacion)
 admin.site.register(MensajeChat)
+
+admin.site.register(Autorizacion)
+admin.site.register(ResultadoMedico)
