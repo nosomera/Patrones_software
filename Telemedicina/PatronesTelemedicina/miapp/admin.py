@@ -1,7 +1,9 @@
-from django.contrib import admin
+
 from django.contrib.auth.admin import UserAdmin
 from .models import VersionBorrador, HistorialReagendamiento
+from django.contrib import admin, messages
 
+from .states import RecetaContexto, TransicionInvalida
 
 from .models import (
     Usuario, Especialidad, Paciente, Medico, Medicina,
@@ -28,6 +30,20 @@ class UsuarioAdmin(UserAdmin):
     filter_horizontal = ("groups", "user_permissions")
 
 
+@admin.register(Receta)
+class RecetaAdmin(admin.ModelAdmin):
+    list_display = ("folio", "estado", "fecha_emision", "fecha_expiracion")
+    actions = ["marcar_dispensada"]
+
+    @admin.action(description="Marcar como dispensada")
+    def marcar_dispensada(self, request, queryset):
+        for receta in queryset:
+            try:
+                RecetaContexto(receta).dispensar()
+            except TransicionInvalida as e:
+                self.message_user(request, f"{receta.folio}: {e}", level=messages.WARNING)
+                
+                
 admin.site.register(Usuario, UsuarioAdmin)
 admin.site.register(Especialidad)
 admin.site.register(Paciente)
@@ -37,7 +53,7 @@ admin.site.register(Sede)
 admin.site.register(Cita)
 admin.site.register(DisponibilidadMedica)
 admin.site.register(Consulta)
-admin.site.register(Receta)
+
 admin.site.register(DetalleReceta)
 admin.site.register(VersionBorrador)
 admin.site.register(HistorialReagendamiento)

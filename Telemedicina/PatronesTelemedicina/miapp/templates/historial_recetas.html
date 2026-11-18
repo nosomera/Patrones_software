@@ -13,13 +13,22 @@
                 Folio {{ receta.folio }}
                 {% if receta.es_urgente %}<span class="badge bg-danger ms-2">Urgente</span>{% endif %}
               </h6>
-              <small class="text-muted">Emitida: {{ receta.fecha_emision|date:"d/m/Y" }} · Vence: {{ receta.fecha_expiracion|date:"d/m/Y" }} · {{ receta.get_estado_display }}</small>
+              <small class="text-muted">Emitida: {{ receta.fecha_emision|date:"d/m/Y" }} · Vence: {{ receta.fecha_expiracion|date:"d/m/Y" }} · {{ receta.estado_visual.etiqueta }}</small>
             </div>
             <div class="d-flex gap-2">
               <a href="{% url 'ver_receta' receta.id 'pdf' %}" target="_blank" class="btn btn-sm btn-outline-secondary">Ver PDF</a>
               <a href="{% url 'ver_receta' receta.id 'html' %}" target="_blank" class="btn btn-sm btn-outline-secondary">Ver HTML</a>
               {% if user.tipo_usuario == "medico" %}
-                <a href="{% url 'renovar_receta' receta.id %}" class="btn btn-sm btn-primary">Renovar</a>
+                <span class="badge bg-{{ receta.estado_visual.color }}">{{ receta.estado_visual.etiqueta }}</span>
+{% if receta.puede_renovar %}
+  <a href="{% url 'renovar_receta' receta.id %}" class="btn btn-sm btn-primary">Renovar</a>
+{% endif %}
+{% if receta.puede_anular and request.user.tipo_usuario == "medico" %}
+  <form method="post" action="{% url 'anular_receta' receta.id %}" class="d-inline">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Anular esta receta?')">Anular</button>
+  </form>
+{% endif %}
               {% endif %}
             </div>
           </div>

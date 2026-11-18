@@ -8,8 +8,8 @@ from .iterators import AgendaMedico
 from .mementos import CitaReagendable, HistorialReagendamientos
 from .models import MensajeChat, Notificacion
 from .singleton import ConfiguracionSistema
+from .states import CitaContexto, TransicionInvalida
 
-ESTADOS_ACTIVOS = ("agendada", "reagendada")
 
 
 class ErrorMediador(Exception):
@@ -23,6 +23,13 @@ def rol_en_cita(cita, usuario):
         return "paciente"
     if usuario.tipo_usuario == "medico" and cita.medico_id == usuario.pk:
         return "medico"
+    
+    def _exigir(cita, accion):
+      try:
+        CitaContexto(cita).exigir(accion)
+      except TransicionInvalida as e:
+        raise ErrorMediador(str(e))
+    
     return None
 
 
@@ -106,10 +113,7 @@ class RegistroCambios(Colega):
         self._mediador.notificar(self, "cita_reagendada", {"cita": cita, "actor": usuario})
 
     def cancelar(self, usuario, cita, motivo):
-        cita.estado = "cancelada"
-        cita.motivo_cancelacion = motivo
-        cita.cancelada_por = usuario
-        cita.save(update_fields=["estado", "motivo_cancelacion", "cancelada_por", "fecha_modificacion"])
+        CitaContexto(cita).cancelar(usuario, motivo)
         print(f"[Mediator] Cambios: la cita #{cita.id} quedó cancelada")
         self._mediador.notificar(self, "cita_cancelada", {"cita": cita, "actor": usuario})
 
@@ -143,8 +147,7 @@ class MediadorCitas(Mediador):
         rol = rol_en_cita(cita, usuario)
         if rol is None:
             raise ErrorMediador("No tienes permiso sobre esta cita")
-        if cita.estado not in ESTADOS_ACTIVOS:
-            raise ErrorMediador("Esta cita ya no se puede reagendar")
+        _exigir(cita, "reagendar")
         if rol == "paciente":
             config = ConfiguracionSistema()
             if not config.puede_reagendar(datetime.combine(cita.fecha, cita.hora)):
@@ -153,21 +156,13 @@ class MediadorCitas(Mediador):
                 )
         return rol
 
-    @transaction.atomic
-    def reagendar_cita(self, usuario, cita, nueva_fecha, nueva_hora, motivo=""):
-        print(f"[Mediator] Solicitud: reagendar la cita #{cita.id} a {nueva_fecha} {nueva_hora:%H:%M}")
-        self.validar_reagendar(usuario, cita)
-        if not self.agenda.franja_libre(cita.medico, nueva_fecha, nueva_hora, cita.sede):
-            raise ErrorMediador("Ese horario no está disponible para este médico. Elige otro dentro de su agenda.")
-        self.cambios.reagendar(usuario, cita, nueva_fecha, nueva_hora, motivo)
-        return cita
+
 
     def validar_cancelar(self, usuario, cita):
         rol = rol_en_cita(cita, usuario)
         if rol is None:
             raise ErrorMediador("No tienes permiso sobre esta cita")
-        if cita.estado not in ESTADOS_ACTIVOS:
-            raise ErrorMediador("Solo se pueden cancelar citas agendadas o reagendadas")
+        _exigir(cita, "cancelar")
         if rol == "paciente":
             config = ConfiguracionSistema()
             limite = datetime.now() + timedelta(hours=config.horas_minimas_cancelar)
@@ -177,14 +172,29 @@ class MediadorCitas(Mediador):
                 )
         return rol
 
+    def validar_atender(self, usuario, cita):
+        if rol_en_cita(cita, usuario) != "medico":
+            raise ErrorMediador("Solo el médico de la cita puede atenderla")
+        _exigir(cita, "atender")
+
     @transaction.atomic
-    def cancelar_cita(self, usuario, cita, motivo=""):
-        print(f"[Mediator] Solicitud: cancelar la cita #{cita.id}")
-        rol = self.validar_cancelar(usuario, cita)
-        motivo = (motivo or "").strip()
-        if rol == "medico" and not motivo:
-            raise ErrorMediador("El médico debe indicar el motivo de la cancelación")
-        self.cambios.cancelar(usuario, cita, motivo)
+    def iniciar_atencion(self, usuario, cita):
+        self.validar_atender(usuario, cita)
+        try:
+            CitaContexto(cita).iniciar_atencion()
+        except TransicionInvalida as e:
+            raise ErrorMediador(str(e))
+        return cita
+
+    @transaction.atomic
+    def marcar_no_asistio(self, usuario, cita):
+        print(f"[Mediator] Solicitud: marcar la cita #{cita.id} como no asistida")
+        if rol_en_cita(cita, usuario) != "medico":
+            raise ErrorMediador("Solo el médico de la cita puede marcarla como no asistida")
+        try:
+            CitaContexto(cita).marcar_no_asistio()
+        except TransicionInvalida as e:
+            raise ErrorMediador(str(e))
         return cita
 
     # ---------------- eventos que reportan los colegas ----------------

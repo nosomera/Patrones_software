@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from .models import HistorialReagendamiento, VersionBorrador
 from .singleton import ConfiguracionSistema
+from .states import CitaContexto
 
 
 # =====================================================================
@@ -157,10 +158,7 @@ class CitaReagendable:
         return memento
 
     def reagendar(self, fecha, hora) -> None:
-        self._cita.fecha = fecha
-        self._cita.hora = hora
-        self._cita.estado = "reagendada"
-        self._cita.save()
+        CitaContexto(self._cita).reagendar(fecha, hora)
 
 
 class HistorialReagendamientos:

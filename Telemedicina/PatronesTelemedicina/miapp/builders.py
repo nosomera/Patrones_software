@@ -6,7 +6,8 @@ from .bridge import RecetaDocumento, RenderizadorPDF, RenderizadorHTML
 from .models import Consulta, DetalleReceta, Receta
 from .singleton import ConfiguracionSistema
 from .decoradores import SelloUrgenteDecorator, NotaAlergiasDecorator
-
+from django.db import transaction
+from .states import CitaContexto
 
 class ConsultaBuilder:
     """Arma la historia clínica de una consulta paso a paso, porque
@@ -35,18 +36,20 @@ class ConsultaBuilder:
         return self
 
     def finalizar_consulta(self) -> Consulta:
-        consulta, _creada = Consulta.objects.update_or_create(
-            cita=self._cita,
-            defaults={
-                "motivo_consulta": self._motivo_consulta,
-                "enfermedad_actual": self._enfermedad_actual,
-                "diagnostico": self._diagnostico,
-                "firmada": True,
-                "fecha_firma": timezone.now(),
-            },
-        )
-        self._cita.estado = "atendida"
-        self._cita.save(update_fields=["estado"])
+        with transaction.atomic():
+            consulta, _creada = Consulta.objects.update_or_create(
+                cita=self._cita,
+                defaults={
+                    "motivo_consulta": self._motivo_consulta,
+                    "enfermedad_actual": self._enfermedad_actual,
+                    "diagnostico": self._diagnostico,
+                    "firmada": True,
+                    "fecha_firma": timezone.now(),
+                },
+            )
+            contexto = CitaContexto(self._cita)
+            contexto.iniciar_atencion()    # no hace nada si ya está en curso
+            contexto.finalizar_atencion()  # en curso -> atendida
         print(f"[Builder] Consulta #{consulta.id} finalizada y firmada")
         return consulta
 

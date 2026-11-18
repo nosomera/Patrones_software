@@ -143,6 +143,7 @@ class Cita(models.Model):
     ESTADO_CHOICES = [
         ("agendada", "Agendada"),
         ("reagendada", "Reagendada"),
+        ("en_curso", "En curso"),
         ("cancelada", "Cancelada"),
         ("atendida", "Atendida"),
         ("no_asistio", "No asistió"),
@@ -171,6 +172,31 @@ class Cita(models.Model):
 
     def __str__(self):
         return f"Cita {self.paciente} con {self.medico} - {self.fecha} {self.hora}"
+    
+    @property
+    def contexto(self):
+        from .states import CitaContexto
+        return CitaContexto(self)
+
+    @property
+    def estado_visual(self):
+        return self.contexto.estado
+
+    @property
+    def puede_reagendar(self):
+        return self.contexto.permite("reagendar")
+
+    @property
+    def puede_cancelar(self):
+        return self.contexto.permite("cancelar")
+
+    @property
+    def puede_atender(self):
+        return self.contexto.permite("atender")
+
+    @property
+    def puede_marcar_no_asistio(self):
+        return self.contexto.permite("no_asistio")
 
 class DisponibilidadMedica(models.Model):
     DIA_CHOICES = [
@@ -217,6 +243,23 @@ class Receta(models.Model):
 
     def __str__(self):
         return f"Receta {self.folio}"
+    
+    @property
+    def contexto(self):
+        from .states import RecetaContexto
+        return RecetaContexto(self)
+
+    @property
+    def estado_visual(self):
+        return self.contexto.estado
+
+    @property
+    def puede_renovar(self):
+        return self.contexto.permite("renovar")
+
+    @property
+    def puede_anular(self):
+        return self.contexto.permite("anular")
 
 
 class DetalleReceta(models.Model):

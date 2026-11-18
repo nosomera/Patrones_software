@@ -25,6 +25,7 @@ from .prototypes import RecetaPrototype
 from .proxies import AccesoDenegado, RecetasProxy
 from .singleton import ConfiguracionSistema, GestorMedicinas
 from .mediators import ErrorMediador, MediadorCitas, SalaChat, rol_en_cita
+from .states import RecetaContexto, TransicionInvalida
 
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
@@ -267,11 +268,22 @@ def atender_cita_view(request, cita_id):
     medico = request.user.perfil_medico
     cita = get_object_or_404(Cita, pk=cita_id, medico=medico)
     consulta_existente = Consulta.objects.filter(cita=cita).first()
+    mediador = MediadorCitas()
 
     # Regla: una consulta firmada no se vuelve a abrir para editarla
     if consulta_existente and consulta_existente.firmada:
         messages.info(request, "Esta consulta ya fue firmada y no se puede modificar.")
         return redirect("prescribir", consulta_id=consulta_existente.id)
+
+    # State: el estado de la cita decide si se puede atender
+    try:
+        if request.method == "POST":
+            mediador.iniciar_atencion(request.user, cita)   # agendada/reagendada -> en curso
+        else:
+            mediador.validar_atender(request.user, cita)
+    except ErrorMediador as e:
+        messages.error(request, str(e))
+        return redirect("citas_medico")
 
     historial = HistorialBorradores(cita, medico)
     form = None
@@ -386,10 +398,10 @@ def historial_recetas_view(request, paciente_id):
 def renovar_receta_view(request, receta_id):
     receta_original = get_object_or_404(Receta, pk=receta_id)
     try:
-        receta_nueva = RecetasProxy(request.user).renovar_receta(receta_original)
-    except AccesoDenegado as e:
+        RecetaContexto(receta_original).exigir("renovar")
+    except TransicionInvalida as e:
         messages.error(request, str(e))
-        return redirect("post_login_redirect")
+        return redirect("historial_recetas", paciente_id=receta_original.consulta.cita.paciente_id)
 
     messages.success(
         request,
@@ -441,7 +453,8 @@ def autoguardar_borrador_view(request, cita_id):
     medico = request.user.perfil_medico
     cita = get_object_or_404(Cita, pk=cita_id, medico=medico)
     if Consulta.objects.filter(cita=cita, firmada=True).exists():
-        return JsonResponse({"ok": False, "error": "consulta firmada"}, status=409)
+        if not cita.puede_atender:
+         return JsonResponse({"ok": False, "error": "la cita ya no admite atención"}, status=409)
 
     borrador = BorradorConsulta(
         request.POST.get("motivo_consulta", ""),
@@ -580,3 +593,33 @@ def chat_enviar_view(request, cita_id):
     except ErrorMediador as e:
         return JsonResponse({"ok": False, "error": str(e)}, status=400)
     return JsonResponse({"ok": True})
+
+@login_required
+@require_POST
+def marcar_no_asistio_view(request, cita_id):
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
+    cita = get_object_or_404(Cita, pk=cita_id, medico=request.user.perfil_medico)
+    try:
+        MediadorCitas().marcar_no_asistio(request.user, cita)
+    except ErrorMediador as e:
+        messages.error(request, str(e))
+    else:
+        messages.success(request, "La cita se marcó como no asistida")
+    return redirect("citas_medico")
+
+
+@login_required
+@require_POST
+def anular_receta_view(request, receta_id):
+    receta = get_object_or_404(Receta.objects.select_related("consulta__cita"), pk=receta_id)
+    cita = receta.consulta.cita
+    if request.user.tipo_usuario != "medico" or cita.medico_id != request.user.pk:
+        raise Http404
+    try:
+        RecetaContexto(receta).anular()
+    except TransicionInvalida as e:
+        messages.error(request, str(e))
+    else:
+        messages.success(request, f"Receta {receta.folio} anulada")
+    return redirect("historial_recetas", paciente_id=cita.paciente_id)

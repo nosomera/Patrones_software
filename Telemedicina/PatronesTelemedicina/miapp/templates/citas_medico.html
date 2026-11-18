@@ -20,18 +20,29 @@
                 <h6 class="mb-1 fw-bold">{{ cita.paciente.usuario.nombre_completo }}</h6>
                 <small class="text-muted">{{ cita.hora|time:"H:i" }} · {{ cita.get_tipo_display }}</small>
               </div>
+
               <div class="d-flex align-items-center gap-2 flex-wrap">
-                {% if cita.estado == "atendida" %}
-                  <span class="badge bg-success">Atendida</span>
-                {% else %}
-                  <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">Atender</a>
-                  <a href="{% url 'cancelar_cita' cita.id %}" class="btn btn-sm btn-outline-danger">Cancelar</a>
-                {% endif %}
-                {% if cita.estado == "reagendada" %}
-                  <a href="{% url 'historial_cambios_cita' cita.id %}" class="btn btn-sm btn-outline-secondary">Historial</a>
-                {% endif %}
-                <a href="{% url 'chat_cita' cita.id %}" class="btn btn-sm btn-outline-primary">💬 Chat</a>
-              </div>
+  <span class="badge bg-{{ cita.estado_visual.color }}">{{ cita.estado_visual.etiqueta }}</span>
+  {% if cita.puede_atender %}
+    <a href="{% url 'atender_cita' cita.id %}" class="btn btn-sm btn-primary">
+      {% if cita.estado == "en_curso" %}Continuar{% else %}Atender{% endif %}
+    </a>
+  {% endif %}
+  {% if cita.puede_marcar_no_asistio %}
+    <form method="post" action="{% url 'marcar_no_asistio' cita.id %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-outline-dark" onclick="return confirm('¿Marcar la cita como no asistida?')">No asistió</button>
+    </form>
+  {% endif %}
+  {% if cita.puede_cancelar %}
+    <a href="{% url 'cancelar_cita' cita.id %}" class="btn btn-sm btn-outline-danger">Cancelar</a>
+  {% endif %}
+  {% if cita.estado == "reagendada" %}
+    <a href="{% url 'historial_cambios_cita' cita.id %}" class="btn btn-sm btn-outline-secondary">Historial</a>
+  {% endif %}
+  <a href="{% url 'chat_cita' cita.id %}" class="btn btn-sm btn-outline-primary">💬 Chat</a>
+</div>
+
             </div>
           {% endfor %}
         </div>

@@ -31,6 +31,9 @@ urlpatterns = [
     path("notificaciones/", views.notificaciones_view, name="notificaciones"),
     path("notificaciones/<int:notificacion_id>/abrir/", views.abrir_notificacion_view, name="abrir_notificacion"),
     
+    path("medico/citas/<int:cita_id>/no-asistio/", views.marcar_no_asistio_view, name="marcar_no_asistio"),
+    path("recetas/<int:receta_id>/anular/", views.anular_receta_view, name="anular_receta"),
+    
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),
 path("medico/citas/", views.citas_medico_view, name="citas_medico"),
