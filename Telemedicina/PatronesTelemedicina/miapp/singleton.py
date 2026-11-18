@@ -77,6 +77,10 @@ class ConfiguracionSistema:
         self.dias_chat_abierto = 7
         self.max_caracteres_mensaje = 1000
         self.segundos_refresco_chat = 5
+        
+                # Observer: autorizaciones y resultados
+        self.dias_vigencia_autorizacion = 30
+        self.dias_aviso_renovacion = 7
 
 
 class GeneradorDocumentosPDF:

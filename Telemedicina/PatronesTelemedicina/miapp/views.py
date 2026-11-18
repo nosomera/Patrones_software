@@ -4,7 +4,8 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse, FileResponse
+
 from django.shortcuts import get_object_or_404, render, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -17,15 +18,19 @@ from .factories import CitaFactory, UsuarioFactory
 from .forms import (
     BuscarHorariosForm, CancelarCitaForm, ConfirmarFranjaForm, ConsultaForm, LoginForm,
     ReagendarCitaForm, RecetaFormSet, RegistroMedicoForm, RegistroPacienteForm,
+    RegistrarResultadoForm, ResponderAutorizacionForm, SolicitarAutorizacionForm
 )
 from .iterators import AgendaCitasMedico, AgendaMedico, buscar_franjas
 from .mementos import BorradorConsulta, CitaReagendable, HistorialBorradores, HistorialReagendamientos
-from .models import Cita, Consulta, Medico, Notificacion, Paciente, Receta
+from .models import Cita, Consulta, Medico, Notificacion, Paciente, Receta,Autorizacion, ResultadoMedico  
 from .prototypes import RecetaPrototype
 from .proxies import AccesoDenegado, RecetasProxy
 from .singleton import ConfiguracionSistema, GestorMedicinas
 from .mediators import ErrorMediador, MediadorCitas, SalaChat, rol_en_cita
 from .states import RecetaContexto, TransicionInvalida
+from .servicios import ErrorServicio, ServicioAutorizaciones, ServicioResultados
+
+import os
 
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
@@ -524,6 +529,9 @@ def abrir_notificacion_view(request, notificacion_id):
     aviso = get_object_or_404(Notificacion, pk=notificacion_id, usuario=request.user)
     aviso.leida = True
     aviso.save(update_fields=["leida"])
+    if aviso.enlace:
+        return redirect(aviso.enlace)
+    
     if aviso.tipo == "chat" and aviso.cita_id:
         return redirect("chat_cita", cita_id=aviso.cita_id)
     return redirect("citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas")
@@ -623,3 +631,173 @@ def anular_receta_view(request, receta_id):
     else:
         messages.success(request, f"Receta {receta.folio} anulada")
     return redirect("historial_recetas", paciente_id=cita.paciente_id)
+
+# ---------------------------------------------------------------------
+# Autorizaciones
+# ---------------------------------------------------------------------
+
+@login_required
+def autorizaciones_view(request):
+    if request.user.tipo_usuario == "medico":
+        lista = Autorizacion.objects.filter(medico=request.user.perfil_medico).select_related(
+            "paciente__usuario", "medicamento")
+        lista = sorted(lista, key=lambda a: a.estado != "pendiente")  # las pendientes primero
+        es_medico = True
+    elif request.user.tipo_usuario == "paciente":
+        lista = Autorizacion.objects.filter(paciente=request.user.perfil_paciente).select_related(
+            "medico__usuario", "medicamento")
+        es_medico = False
+    else:
+        return redirect("post_login_redirect")
+    return render(request, "autorizaciones.html", {"autorizaciones": lista, "es_medico": es_medico})
+
+
+@login_required
+def solicitar_autorizacion_view(request):
+    if request.user.tipo_usuario != "paciente":
+        return redirect("post_login_redirect")
+
+    form = SolicitarAutorizacionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        datos = form.cleaned_data
+        try:
+            ServicioAutorizaciones().solicitar(
+                paciente=request.user.perfil_paciente,
+                medico=datos["medico"],
+                tipo=datos["tipo"],
+                descripcion=datos["descripcion"],
+                motivo=datos["motivo"],
+                medicamento=datos["medicamento"],
+            )
+        except ErrorServicio as e:
+            form.add_error(None, str(e))
+        else:
+            messages.success(request, "Solicitud enviada. Te avisaremos cuando el médico responda.")
+            return redirect("autorizaciones")
+
+    return render(request, "solicitar_autorizacion.html", {"form": form})
+
+
+@login_required
+@require_POST
+def renovar_autorizacion_view(request, autorizacion_id):
+    if request.user.tipo_usuario != "paciente":
+        return redirect("post_login_redirect")
+    original = get_object_or_404(Autorizacion, pk=autorizacion_id, paciente=request.user.perfil_paciente)
+    try:
+        ServicioAutorizaciones().renovar(request.user.perfil_paciente, original)
+    except ErrorServicio as e:
+        messages.error(request, str(e))
+    else:
+        messages.success(request, "Solicitud de renovación enviada al médico.")
+    return redirect("autorizaciones")
+
+
+@login_required
+def responder_autorizacion_view(request, autorizacion_id):
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
+
+    medico = request.user.perfil_medico
+    autorizacion = get_object_or_404(
+        Autorizacion.objects.select_related("paciente__usuario", "medicamento"),
+        pk=autorizacion_id, medico=medico,
+    )
+    form = ResponderAutorizacionForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        servicio = ServicioAutorizaciones()
+        respuesta = form.cleaned_data["respuesta"]
+        try:
+            if request.POST.get("accion") == "aprobar":
+                servicio.aprobar(medico, autorizacion, respuesta)
+                messages.success(request, "Autorización aprobada. Se avisó al paciente.")
+            else:
+                servicio.rechazar(medico, autorizacion, respuesta)
+                messages.success(request, "Autorización rechazada. Se avisó al paciente.")
+            return redirect("autorizaciones")
+        except ErrorServicio as e:
+            form.add_error(None, str(e))
+
+    return render(request, "responder_autorizacion.html", {
+        "form": form,
+        "autorizacion": autorizacion,
+        "vigencia_dias": ConfiguracionSistema().dias_vigencia_autorizacion,
+    })
+
+
+# ---------------------------------------------------------------------
+# Resultados médicos
+# ---------------------------------------------------------------------
+
+@login_required
+def resultados_view(request):
+    if request.user.tipo_usuario == "paciente":
+        resultados = ResultadoMedico.objects.filter(
+            paciente=request.user.perfil_paciente).select_related("medico__usuario")
+        es_medico = False
+    elif request.user.tipo_usuario == "medico":
+        resultados = ResultadoMedico.objects.filter(
+            medico=request.user.perfil_medico).select_related("paciente__usuario")
+        es_medico = True
+    else:
+        return redirect("post_login_redirect")
+    return render(request, "resultados.html", {"resultados": resultados, "es_medico": es_medico})
+
+
+@login_required
+def registrar_resultado_view(request):
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
+
+    medico = request.user.perfil_medico
+    form = RegistrarResultadoForm(request.POST or None, request.FILES or None, medico=medico)
+    if request.method == "POST" and form.is_valid():
+        datos = form.cleaned_data
+        try:
+            ServicioResultados().registrar(
+                medico=medico,
+                paciente=datos["paciente"],
+                tipo=datos["tipo"],
+                nombre_examen=datos["nombre_examen"],
+                fecha_resultado=datos["fecha_resultado"],
+                archivo=datos["archivo"],
+                resultado_texto=datos["resultado_texto"],
+                observaciones=datos["observaciones"],
+            )
+        except ErrorServicio as e:
+            form.add_error(None, str(e))
+        else:
+            messages.success(request, "Resultado registrado. Se avisó al paciente.")
+            return redirect("resultados")
+
+    return render(request, "registrar_resultado.html", {"form": form})
+
+
+@login_required
+def ver_resultado_view(request, resultado_id):
+    resultado = get_object_or_404(
+        ResultadoMedico.objects.select_related("paciente__usuario", "medico__usuario"), pk=resultado_id)
+    try:
+        ServicioResultados().consultar(request.user, resultado, "ver")
+    except ErrorServicio:
+        raise Http404
+    return render(request, "ver_resultado.html", {
+        "resultado": resultado,
+        "es_medico": request.user.tipo_usuario == "medico",
+    })
+
+
+@login_required
+def descargar_resultado_view(request, resultado_id):
+    resultado = get_object_or_404(ResultadoMedico, pk=resultado_id)
+    if not resultado.archivo:
+        raise Http404
+    try:
+        ServicioResultados().consultar(request.user, resultado, "descargar")
+    except ErrorServicio:
+        raise Http404
+    return FileResponse(
+        resultado.archivo.open("rb"), as_attachment=False,
+        filename=os.path.basename(resultado.archivo.name),
+    )

@@ -324,6 +324,10 @@ class Notificacion(models.Model):
         ("cita_reagendada", "Cita reagendada"),
         ("cita_cancelada", "Cita cancelada"),
         ("chat", "Mensaje de chat"),
+        ("aut_solicitada", "Autorización solicitada"),
+        ("aut_aprobada", "Autorización aprobada"),
+        ("aut_rechazada", "Autorización rechazada"),
+        ("resultado_nuevo", "Resultado médico disponible"),
     ]
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="notificaciones")
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
@@ -331,6 +335,7 @@ class Notificacion(models.Model):
     cita = models.ForeignKey(Cita, on_delete=models.CASCADE, null=True, blank=True, related_name="notificaciones")
     leida = models.BooleanField(default=False)
     fecha = models.DateTimeField(auto_now_add=True)
+    enlace = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-fecha", "-id"]
@@ -351,3 +356,112 @@ class MensajeChat(models.Model):
 
     def __str__(self):
         return f"Cita #{self.cita_id} - {self.emisor.nombre_completo}: {self.contenido[:30]}"
+    
+    
+class Autorizacion(models.Model):
+    TIPO_CHOICES = [
+        ("medicamento", "Medicamento"),
+        ("examen", "Examen o laboratorio"),
+        ("procedimiento", "Procedimiento"),
+        ("otro", "Otro servicio"),
+    ]
+    ESTADO_CHOICES = [
+        ("pendiente", "Pendiente"),
+        ("aprobada", "Aprobada"),
+        ("rechazada", "Rechazada"),
+    ]
+    VISUAL = {
+        "pendiente": ("Pendiente", "warning"),
+        "aprobada": ("Aprobada", "success"),
+        "rechazada": ("Rechazada", "danger"),
+        "vencida": ("Vencida", "dark"),
+    }
+
+    paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE, related_name="autorizaciones")
+    medico = models.ForeignKey(Medico, on_delete=models.CASCADE, related_name="autorizaciones_a_revisar")
+    tipo = models.CharField(max_length=15, choices=TIPO_CHOICES)
+    medicamento = models.ForeignKey(
+        Medicina, on_delete=models.SET_NULL, null=True, blank=True, related_name="autorizaciones"
+    )
+    descripcion = models.CharField(max_length=255)
+    motivo = models.TextField(blank=True)
+    entidad = models.CharField(max_length=100, blank=True)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default="pendiente")
+    respuesta = models.CharField(max_length=255, blank=True)
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_respuesta = models.DateTimeField(null=True, blank=True)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    renovacion_de = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="renovaciones"
+    )
+
+    class Meta:
+        ordering = ["-fecha_solicitud", "-id"]
+
+    def __str__(self):
+        return f"Autorización #{self.pk}: {self.descripcion}"
+
+    @property
+    def estado_efectivo(self):
+        """'vencida' no se guarda: se deduce de la fecha de vencimiento."""
+        if self.estado == "aprobada" and self.fecha_vencimiento and self.fecha_vencimiento < date.today():
+            return "vencida"
+        return self.estado
+
+    @property
+    def etiqueta_estado(self):
+        return self.VISUAL[self.estado_efectivo][0]
+
+    @property
+    def color_estado(self):
+        return self.VISUAL[self.estado_efectivo][1]
+
+    @property
+    def puede_renovar(self):
+        if self.estado != "aprobada" or not self.fecha_vencimiento:
+            return False
+        if self.renovaciones.exclude(estado="rechazada").exists():
+            return False
+        from .singleton import ConfiguracionSistema
+        dias_restantes = (self.fecha_vencimiento - date.today()).days
+        return dias_restantes <= ConfiguracionSistema().dias_aviso_renovacion
+
+
+class ResultadoMedico(models.Model):
+    TIPO_CHOICES = [
+        ("laboratorio", "Laboratorio clínico"),
+        ("imagen", "Imagenología"),
+        ("otro", "Otro estudio"),
+    ]
+    paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE, related_name="resultados")
+    medico = models.ForeignKey(Medico, on_delete=models.CASCADE, related_name="resultados_registrados")
+    tipo = models.CharField(max_length=15, choices=TIPO_CHOICES)
+    nombre_examen = models.CharField(max_length=150)
+    fecha_resultado = models.DateField()
+    archivo = models.FileField(upload_to="resultados/", null=True, blank=True)
+    resultado_texto = models.TextField(blank=True)
+    observaciones = models.TextField(blank=True)
+    visto_por_paciente = models.BooleanField(default=False)
+    fecha_recepcion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha_recepcion", "-id"]
+
+    def __str__(self):
+        return f"{self.nombre_examen} - {self.paciente}"
+
+
+class RegistroAuditoria(models.Model):
+    usuario = models.ForeignKey(
+        Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name="registros_auditoria"
+    )
+    evento = models.CharField(max_length=40)
+    descripcion = models.CharField(max_length=255)
+    objeto = models.CharField(max_length=80, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"{self.fecha:%d/%m/%Y %H:%M} - {self.descripcion}"

@@ -3,6 +3,8 @@ from django import forms
 from .models import Especialidad
 from .models import Cita, DetalleReceta, Especialidad, Medico, Medicina, Sede
 from datetime import date
+from .singleton import ConfiguracionSistema
+
 
 class BootstrapFormMixin:
     def __init__(self, *args, **kwargs):
@@ -130,3 +132,60 @@ class CancelarCitaForm(BootstrapFormMixin, forms.Form):
     )
 
 RecetaFormSet = forms.formset_factory(MedicamentoRecetaForm, extra=3)
+
+class SolicitarAutorizacionForm(BootstrapFormMixin, forms.Form):
+    medico = forms.ModelChoiceField(queryset=Medico.objects.all(), label="Médico que revisará la solicitud")
+    tipo = forms.ChoiceField(choices=Autorizacion.TIPO_CHOICES)
+    medicamento = forms.ModelChoiceField(queryset=Medicina.objects.all(), required=False)
+    descripcion = forms.CharField(max_length=255, required=False, label="Servicio o procedimiento solicitado")
+    motivo = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False, label="Motivo clínico")
+
+    def clean(self):
+        cleaned = super().clean()
+        tipo = cleaned.get("tipo")
+        if tipo == "medicamento" and not cleaned.get("medicamento"):
+            raise forms.ValidationError("Elige el medicamento que necesitas autorizar")
+        if tipo and tipo != "medicamento" and not (cleaned.get("descripcion") or "").strip():
+            raise forms.ValidationError("Describe el servicio que necesitas autorizar")
+        return cleaned
+
+
+class ResponderAutorizacionForm(BootstrapFormMixin, forms.Form):
+    respuesta = forms.CharField(
+        max_length=255, required=False, widget=forms.Textarea(attrs={"rows": 2}),
+        label="Observación para el paciente", help_text="Obligatoria si rechazas la solicitud.",
+    )
+
+
+class RegistrarResultadoForm(BootstrapFormMixin, forms.Form):
+    paciente = forms.ModelChoiceField(queryset=Paciente.objects.none())
+    tipo = forms.ChoiceField(choices=ResultadoMedico.TIPO_CHOICES)
+    nombre_examen = forms.CharField(max_length=150, label="Nombre del examen")
+    fecha_resultado = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), label="Fecha del resultado")
+    archivo = forms.FileField(required=False, label="Archivo (PDF, JPG o PNG)")
+    resultado_texto = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), required=False, label="Resultado en texto")
+    observaciones = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
+
+    def __init__(self, *args, medico=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if medico is not None:
+            self.fields["paciente"].queryset = (
+                Paciente.objects.filter(citas__medico=medico).select_related("usuario").distinct()
+            )
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get("archivo")
+        if archivo:
+            config = ConfiguracionSistema()
+            extension = archivo.name.rsplit(".", 1)[-1].lower() if "." in archivo.name else ""
+            if extension not in config.formatos_permitidos:
+                raise forms.ValidationError(f"Formato no permitido. Usa: {', '.join(config.formatos_permitidos)}")
+            if archivo.size > config.tamanio_maximo_archivo_mb * 1024 * 1024:
+                raise forms.ValidationError(f"El archivo supera los {config.tamanio_maximo_archivo_mb} MB")
+        return archivo
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("archivo") and not (cleaned.get("resultado_texto") or "").strip():
+            raise forms.ValidationError("Adjunta el archivo del resultado o escribe el resultado en texto")
+        return cleaned
