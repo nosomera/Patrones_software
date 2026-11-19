@@ -1,12 +1,31 @@
 {% extends "base.html" %}
 {% block title %}Resultados médicos{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <h1 class="fw-bold text-primary mb-0">Resultados médicos</h1>
-  {% if es_medico %}
-    <a href="{% url 'registrar_resultado' %}" class="btn btn-primary fw-bold">+ Registrar resultado</a>
-  {% endif %}
+  <div class="d-flex gap-2">
+    {% if not es_medico and resultados %}
+      <a href="{% url 'informe_resultados' %}" class="btn btn-outline-primary">Descargar informe</a>
+    {% endif %}
+    {% if es_medico %}
+      <a href="{% url 'registrar_resultado' %}" class="btn btn-primary fw-bold">+ Registrar resultado</a>
+    {% endif %}
+  </div>
 </div>
+
+{% if resumen.total %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold text-primary">{{ resumen.total }}</div><small class="text-muted">Total</small></div></div>
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold">{{ resumen.por_tipo.laboratorio }}</div><small class="text-muted">Laboratorio</small></div></div>
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold">{{ resumen.por_tipo.imagen }}</div><small class="text-muted">Imagenología</small></div></div>
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold">{{ resumen.por_tipo.otro }}</div><small class="text-muted">Otros</small></div></div>
+</div>
+<p class="text-muted small">
+  Último resultado: {{ resumen.ultimo|date:"d/m/Y" }} ·
+  {% if es_medico %}Pendientes de ver por el paciente: {{ resumen.sin_ver }}{% else %}Sin abrir: {{ resumen.sin_ver }}{% endif %}
+</p>
+{% endif %}
+
 <div class="card shadow-sm border-0">
   <div class="card-body p-4">
     <div class="list-group list-group-flush">
@@ -22,7 +41,12 @@
               {% if es_medico %}Paciente: {{ r.paciente.usuario.nombre_completo }}{% else %}Dr(a). {{ r.medico.usuario.nombre_completo }}{% endif %}
             </small>
           </div>
-          <a href="{% url 'ver_resultado' r.id %}" class="btn btn-sm btn-outline-primary">Ver</a>
+          <div class="d-flex gap-2">
+            {% if es_medico %}
+              <a href="{% url 'informe_resultados' %}?paciente={{ r.paciente.pk }}" class="btn btn-sm btn-outline-secondary">Informe del paciente</a>
+            {% endif %}
+            <a href="{% url 'ver_resultado' r.id %}" class="btn btn-sm btn-outline-primary">Ver</a>
+          </div>
         </div>
       {% empty %}
         <div class="alert alert-info mb-0">No hay resultados registrados.</div>

@@ -29,7 +29,7 @@ from .singleton import ConfiguracionSistema, GestorMedicinas
 from .mediators import ErrorMediador, MediadorCitas, SalaChat, rol_en_cita
 from .states import RecetaContexto, TransicionInvalida
 from .servicios import ErrorServicio, ServicioAutorizaciones, ServicioResultados
-
+from .visitors import ColeccionResultados, InformeTextoVisitor, ResumenVisitor
 import os
 
 # ---------------------------------------------------------------------
@@ -732,21 +732,24 @@ def responder_autorizacion_view(request, autorizacion_id):
 # ---------------------------------------------------------------------
 # Resultados médicos
 # ---------------------------------------------------------------------
-
 @login_required
 def resultados_view(request):
     if request.user.tipo_usuario == "paciente":
-        resultados = ResultadoMedico.objects.filter(
-            paciente=request.user.perfil_paciente).select_related("medico__usuario")
+        coleccion = ColeccionResultados.desde_paciente(request.user.perfil_paciente)
         es_medico = False
     elif request.user.tipo_usuario == "medico":
-        resultados = ResultadoMedico.objects.filter(
-            medico=request.user.perfil_medico).select_related("paciente__usuario")
+        coleccion = ColeccionResultados.desde_medico(request.user.perfil_medico)
         es_medico = True
     else:
         return redirect("post_login_redirect")
-    return render(request, "resultados.html", {"resultados": resultados, "es_medico": es_medico})
 
+    resumen = ResumenVisitor()
+    coleccion.aceptar(resumen)
+    return render(request, "resultados.html", {
+        "resultados": coleccion.resultados,
+        "es_medico": es_medico,
+        "resumen": resumen,
+    })
 
 @login_required
 def registrar_resultado_view(request):
@@ -804,3 +807,33 @@ def descargar_resultado_view(request, resultado_id):
         resultado.archivo.open("rb"), as_attachment=False,
         filename=os.path.basename(resultado.archivo.name),
     )
+    
+@login_required
+def informe_resultados_view(request):
+    if request.user.tipo_usuario == "paciente":
+        paciente = request.user.perfil_paciente
+        coleccion = ColeccionResultados.desde_paciente(paciente)
+    elif request.user.tipo_usuario == "medico":
+        try:
+            paciente = get_object_or_404(Paciente, pk=int(request.GET.get("paciente", "")))
+        except ValueError:
+            raise Http404
+        coleccion = ColeccionResultados.desde_paciente(paciente, medico=request.user.perfil_medico)
+    else:
+        return redirect("post_login_redirect")
+
+    if coleccion.esta_vacia():
+        messages.info(request, "No hay resultados para generar el informe.")
+        return redirect("resultados")
+
+    visitante = InformeTextoVisitor(f"Informe de resultados médicos - {paciente.usuario.nombre_completo}")
+    coleccion.aceptar(visitante)
+
+    # Auditoría: el Observer registra cada resultado incluido en la descarga
+    servicio = ServicioResultados()
+    for resultado in coleccion.resultados:
+        servicio.consultar(request.user, resultado, "descargar")
+
+    respuesta = HttpResponse(visitante.texto(), content_type="text/plain; charset=utf-8")
+    respuesta["Content-Disposition"] = 'attachment; filename="informe_resultados.txt"'
+    return respuesta

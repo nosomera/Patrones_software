@@ -44,6 +44,8 @@ urlpatterns = [
     path("resultados/<int:resultado_id>/", views.ver_resultado_view, name="ver_resultado"),
     path("resultados/<int:resultado_id>/archivo/", views.descargar_resultado_view, name="descargar_resultado"),
     
+    path("resultados/informe/", views.informe_resultados_view, name="informe_resultados"),
+    
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),
 path("medico/citas/", views.citas_medico_view, name="citas_medico"),
