@@ -17,6 +17,7 @@ AUTORIZACION_APROBADA = "autorizacion_aprobada"
 AUTORIZACION_RECHAZADA = "autorizacion_rechazada"
 RESULTADO_REGISTRADO = "resultado_registrado"
 RESULTADO_CONSULTADO = "resultado_consultado"
+CATALOGO_IMPORTADO = "catalogo_importado"
 
 
 @dataclass(frozen=True)
@@ -132,7 +133,7 @@ class ObservadorAuditoria(Observador):
     """Deja constancia de quién hizo o vio qué, y cuándo."""
     eventos = (
         AUTORIZACION_SOLICITADA, AUTORIZACION_APROBADA, AUTORIZACION_RECHAZADA,
-        RESULTADO_REGISTRADO, RESULTADO_CONSULTADO,
+        RESULTADO_REGISTRADO, RESULTADO_CONSULTADO, CATALOGO_IMPORTADO,
     )
     ACCIONES = {
         AUTORIZACION_SOLICITADA: "solicitó la autorización",
@@ -141,6 +142,47 @@ class ObservadorAuditoria(Observador):
         RESULTADO_REGISTRADO: "registró el resultado",
         RESULTADO_CONSULTADO: "consultó el resultado",
     }
+
+    def actualizar(self, evento: Evento) -> None:
+        datos = evento.datos
+        usuario = datos.get("usuario")
+        quien = usuario.nombre_completo if usuario else "El sistema"
+
+        if evento.tipo == CATALOGO_IMPORTADO:
+            r = datos["resumen"]
+            verbo = "simuló la importación del catálogo" if r.simulado else "importó el catálogo"
+            RegistroAuditoria.objects.create(
+                usuario=usuario,
+                evento=evento.tipo,
+                descripcion=(
+                    f"{quien} {verbo} «{datos['catalogo']}»: {r.creadas} creadas, "
+                    f"{r.actualizadas} actualizadas, {r.sin_cambios} sin cambios, {r.con_error} con error"
+                )[:255],
+                objeto=f"Catalogo {datos['catalogo']}"[:80],
+            )
+            print(f"[Observer] Auditoría: {quien} {verbo} «{datos['catalogo']}»")
+            return
+
+        autorizacion = datos.get("autorizacion")
+        if autorizacion is not None:
+            objeto, nombre = f"Autorizacion #{autorizacion.pk}", autorizacion.descripcion
+        else:
+            resultado = datos["resultado"]
+            objeto, nombre = f"ResultadoMedico #{resultado.pk}", resultado.nombre_examen
+
+        accion = self.ACCIONES[evento.tipo]
+        if evento.tipo == RESULTADO_CONSULTADO and datos.get("accion") == "descargar":
+            accion = "descargó el resultado"
+
+        RegistroAuditoria.objects.create(
+            usuario=usuario,
+            evento=evento.tipo,
+            descripcion=f"{quien} {accion} «{nombre}»"[:255],
+            objeto=objeto,
+        )
+        print(f"[Observer] Auditoría: {quien} {accion} «{nombre}»")
+        
+
 
     def actualizar(self, evento: Evento) -> None:
         datos = evento.datos

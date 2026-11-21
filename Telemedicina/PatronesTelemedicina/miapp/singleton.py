@@ -78,6 +78,12 @@ class ConfiguracionSistema:
         self.max_caracteres_mensaje = 1000
         self.segundos_refresco_chat = 5
         
+        # Template Method: importación de catálogos
+        self.max_tamanio_importacion_mb = 10
+        self.max_filas_importacion = 5000
+        self.formatos_importacion = ["csv"]
+        self.max_errores_importacion = 50
+        
         # Observer: autorizaciones y resultados
         self.dias_vigencia_autorizacion = 30
         self.dias_aviso_renovacion = 7

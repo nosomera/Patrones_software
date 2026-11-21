@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Resultado de la importación{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="fw-bold text-primary fs-3 mb-0">
+    {{ resumen.catalogo }}
+    {% if resumen.simulado %}<span class="badge bg-warning text-dark ms-2">Simulado: no se guardó nada</span>{% endif %}
+  </h1>
+  <a href="{% url 'importar_catalogo' %}" class="btn btn-outline-primary btn-sm">Importar otro archivo</a>
+</div>
+<p class="text-muted">Archivo: {{ resumen.archivo }} · {{ resumen.total_filas }} fila(s) con datos</p>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold text-success">{{ resumen.creadas }}</div><small class="text-muted">Creadas</small></div></div>
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold text-primary">{{ resumen.actualizadas }}</div><small class="text-muted">Actualizadas</small></div></div>
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold">{{ resumen.sin_cambios }}</div><small class="text-muted">Sin cambios</small></div></div>
+  <div class="col-6 col-md-3"><div class="card shadow-sm border-0 text-center p-3"><div class="fs-3 fw-bold text-danger">{{ resumen.con_error }}</div><small class="text-muted">Con error</small></div></div>
+</div>
+
+{% for aviso in resumen.avisos %}<div class="alert alert-warning py-2">{{ aviso }}</div>{% endfor %}
+
+{% if resumen.errores %}
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <h5 class="text-secondary mb-3">Filas con error</h5>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th style="width: 90px;">Fila</th><th>Motivo</th></tr></thead>
+        <tbody>
+          {% for fila, motivo in resumen.errores_mostrados %}
+            <tr><td>{{ fila }}</td><td>{{ motivo }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if resumen.errores_ocultos %}<p class="small text-muted mt-2 mb-0">Y {{ resumen.errores_ocultos }} error(es) más no se muestran.</p>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

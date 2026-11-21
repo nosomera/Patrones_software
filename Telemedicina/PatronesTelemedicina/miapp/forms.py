@@ -5,6 +5,8 @@ from .models import Autorizacion, Cita, DetalleReceta, Especialidad, Medico, Med
 from datetime import date
 from .singleton import ConfiguracionSistema
 
+from .importadores import IMPORTADORES
+
 from .strategies import INTENSIDADES, ClasificadorTriaje, DatosTriaje
 
 
@@ -253,3 +255,22 @@ class ReevaluarTriajeForm(BootstrapFormMixin, forms.Form):
         self.fields["metodo"].choices = [
             (c, e.nombre) for c, e in ClasificadorTriaje.estrategias_disponibles().items()
         ]
+        
+class ImportarCatalogoForm(BootstrapFormMixin, forms.Form):
+    catalogo = forms.ChoiceField(label="Catálogo")
+    archivo = forms.FileField(label="Archivo CSV")
+    simular = forms.BooleanField(required=False, label="Solo simular (no guarda nada)")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["catalogo"].choices = [(c, i.nombre) for c, i in IMPORTADORES.items()]
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data["archivo"]
+        config = ConfiguracionSistema()
+        extension = archivo.name.rsplit(".", 1)[-1].lower() if "." in archivo.name else ""
+        if extension not in config.formatos_importacion:
+            raise forms.ValidationError(f"Formato no permitido. Usa: {', '.join(config.formatos_importacion)}")
+        if archivo.size > config.max_tamanio_importacion_mb * 1024 * 1024:
+            raise forms.ValidationError(f"El archivo supera los {config.max_tamanio_importacion_mb} MB")
+        return archivo

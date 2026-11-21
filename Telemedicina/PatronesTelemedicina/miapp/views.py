@@ -39,6 +39,8 @@ from .models import Triaje  # súmalo a tu import de .models
 from .servicios import ErrorServicio, ErrorTriaje, ServicioAutorizaciones, ServicioResultados, ServicioTriaje
 from .strategies import ClasificadorTriaje
 
+from .forms import ImportarCatalogoForm  # súmalo a tu bloque de .forms
+from .importadores import IMPORTADORES, ErrorImportacion, obtener_importador
 
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
@@ -90,6 +92,8 @@ def login_view(request):
 def post_login_redirect(request):
     if request.user.tipo_usuario == "medico":
         return redirect("dashboard_medico")
+    if request.user.tipo_usuario == "admin":
+        return redirect("dashboard_admin")
     return redirect("dashboard_paciente")
 
 
@@ -135,6 +139,7 @@ def registro_medico_view(request):
 # ---------------------------------------------------------------------
 # Dashboards
 # ---------------------------------------------------------------------
+
 @login_required
 def dashboard_paciente(request):
     if request.user.tipo_usuario != "paciente":
@@ -921,3 +926,56 @@ def evaluar_medico_view(request, cita_id):
         "efectivo": origen.efectivo,
         "filas": ClasificadorTriaje().comparar(origen.datos),
     })
+    
+@login_required
+def dashboard_admin(request):
+    if request.user.tipo_usuario != "admin":
+        return redirect("post_login_redirect")
+    modulos = [
+        {"icono": "📥", "titulo": "Importar catálogos", "descripcion": "Carga medicinas y diagnósticos desde un archivo CSV.", "url": reverse("importar_catalogo")},
+        {"icono": "🧾", "titulo": "Registros de auditoría", "descripcion": "Consulta quién hizo o vio qué en la plataforma.", "url": reverse("admin:miapp_registroauditoria_changelist")},
+        {"icono": "⚙️", "titulo": "Panel de administración", "descripcion": "Gestiona usuarios, sedes, especialidades y demás datos.", "url": reverse("admin:index")},
+    ]
+    return render(request, "dashboard_admin.html", {"modulos": modulos})
+
+
+def _catalogos_disponibles():
+    return [
+        {"codigo": c, "nombre": i.nombre, "columnas": i.descripcion_columnas()}
+        for c, i in IMPORTADORES.items()
+    ]
+
+
+@login_required
+def importar_catalogo_view(request):
+    if request.user.tipo_usuario != "admin":
+        return redirect("post_login_redirect")
+
+    form = ImportarCatalogoForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        archivo = form.cleaned_data["archivo"]
+        try:
+            resumen = obtener_importador(form.cleaned_data["catalogo"]).importar(
+                archivo.read(), archivo.name, form.cleaned_data["simular"], request.user
+            )
+        except ErrorImportacion as e:
+            form.add_error(None, str(e))
+        else:
+            return render(request, "resultado_importacion.html", {"resumen": resumen})
+
+    config = ConfiguracionSistema()
+    return render(request, "importar_catalogo.html", {
+        "form": form,
+        "catalogos": _catalogos_disponibles(),
+        "max_mb": config.max_tamanio_importacion_mb,
+        "max_filas": config.max_filas_importacion,
+    })
+
+
+@login_required
+def ejemplo_catalogo_view(request, codigo):
+    if request.user.tipo_usuario != "admin" or codigo not in IMPORTADORES:
+        raise Http404
+    respuesta = HttpResponse(IMPORTADORES[codigo].contenido_ejemplo(), content_type="text/csv; charset=utf-8")
+    respuesta["Content-Disposition"] = f'attachment; filename="ejemplo_{codigo}.csv"'
+    return respuesta

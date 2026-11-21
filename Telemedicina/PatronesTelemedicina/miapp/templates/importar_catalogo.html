@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Importar catálogo{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-1">Importar catálogo</h1>
+<p class="text-muted">Archivos CSV de hasta {{ max_mb }} MB y {{ max_filas }} filas. Se aceptan los separadores coma y punto y coma.</p>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body p-4">
+    <form method="post" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+      {% include "_form_field.html" with field=form.catalogo %}
+      {% include "_form_field.html" with field=form.archivo %}
+      <div class="form-check mb-3">
+        {{ form.simular }}
+        <label class="form-check-label" for="{{ form.simular.id_for_label }}">{{ form.simular.label }}</label>
+      </div>
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2">Importar</button>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <h5 class="text-secondary mb-3">Formato esperado</h5>
+    {% for c in catalogos %}
+      <div class="d-flex justify-content-between align-items-center py-2 border-bottom flex-wrap gap-2">
+        <div>
+          <strong>{{ c.nombre }}</strong><br>
+          <small class="text-muted">{{ c.columnas }}</small>
+        </div>
+        <a href="{% url 'ejemplo_catalogo' c.codigo %}" class="btn btn-sm btn-outline-secondary">Descargar ejemplo</a>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -50,6 +50,10 @@ urlpatterns = [
     path("triaje/<int:triaje_id>/", views.resultado_triaje_view, name="resultado_triaje"),
     path("medico/citas/<int:cita_id>/triaje/", views.evaluar_medico_view, name="evaluar_medico"),
     
+    path("dashboard/admin/", views.dashboard_admin, name="dashboard_admin"),
+    path("catalogos/importar/", views.importar_catalogo_view, name="importar_catalogo"),
+    path("catalogos/<slug:codigo>/ejemplo/", views.ejemplo_catalogo_view, name="ejemplo_catalogo"),
+    
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),
 path("medico/citas/", views.citas_medico_view, name="citas_medico"),

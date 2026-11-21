@@ -539,3 +539,15 @@ class Triaje(models.Model):
     def efectivo(self):
         """La reevaluación más reciente del médico, o la propia si no hay."""
         return self.reevaluaciones.order_by("-fecha", "-id").first() or self
+    
+    
+class CatalogoCIE(models.Model):
+    codigo = models.CharField(max_length=10, unique=True)
+    descripcion = models.CharField(max_length=255)
+    version = models.CharField(max_length=10, default="CIE-10")
+
+    class Meta:
+        ordering = ["codigo"]
+
+    def __str__(self):
+        return f"{self.codigo} - {self.descripcion[:50]}"
