@@ -19,6 +19,10 @@
 
               <div class="d-flex align-items-center gap-2 flex-wrap">
   <span class="badge bg-{{ cita.estado_visual.color }}">{{ cita.estado_visual.etiqueta }}</span>
+
+
+  {% if cita.triaje_efectivo %}<span class="badge bg-{{ cita.triaje_efectivo.color_nivel }}">Triaje: {{ cita.triaje_efectivo.etiqueta_nivel }}</span>{% endif %}
+
   {% if cita.puede_reagendar %}
     <a href="{% url 'reagendar_cita' cita.id %}" class="btn btn-sm btn-outline-primary">Reagendar</a>
   {% endif %}

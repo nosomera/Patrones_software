@@ -46,6 +46,10 @@ urlpatterns = [
     
     path("resultados/informe/", views.informe_resultados_view, name="informe_resultados"),
     
+    path("triaje/", views.evaluar_triaje_view, name="evaluar_triaje"),
+    path("triaje/<int:triaje_id>/", views.resultado_triaje_view, name="resultado_triaje"),
+    path("medico/citas/<int:cita_id>/triaje/", views.evaluar_medico_view, name="evaluar_medico"),
+    
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),
 path("medico/citas/", views.citas_medico_view, name="citas_medico"),

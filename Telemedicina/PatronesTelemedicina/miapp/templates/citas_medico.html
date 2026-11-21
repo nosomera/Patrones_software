@@ -8,6 +8,18 @@
   <a href="?periodo=mes" class="btn btn-outline-primary {% if periodo == 'mes' %}active{% endif %}">Mes</a>
 </div>
 
+{% if prioritarias %}
+<div class="alert alert-danger">
+  <h6 class="fw-bold mb-2">Pacientes prioritarios</h6>
+  {% for c in prioritarias %}
+    <div class="d-flex justify-content-between align-items-center py-1">
+      <span>{{ c.paciente.usuario.nombre_completo }} · {{ c.fecha|date:"d/m" }} {{ c.hora|time:"H:i" }} · <strong>{{ c.triaje_efectivo.etiqueta_nivel }}</strong></span>
+      <a href="{% url 'evaluar_medico' c.id %}" class="btn btn-sm btn-outline-danger">Ver triaje</a>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {% for dia, citas in dias %}
   <div class="card shadow-sm border-0 mb-3">
     <div class="card-body p-4">
@@ -43,6 +55,10 @@
   <a href="{% url 'chat_cita' cita.id %}" class="btn btn-sm btn-outline-primary">💬 Chat</a>
 </div>
 
+{% if cita.triaje_efectivo %}
+  <span class="badge bg-{{ cita.triaje_efectivo.color_nivel }}">Triaje: {{ cita.triaje_efectivo.etiqueta_nivel }}</span>
+  <a href="{% url 'evaluar_medico' cita.id %}" class="btn btn-sm btn-outline-secondary">Triaje</a>
+{% endif %}
             </div>
           {% endfor %}
         </div>

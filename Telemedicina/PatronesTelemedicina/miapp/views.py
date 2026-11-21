@@ -32,6 +32,14 @@ from .servicios import ErrorServicio, ServicioAutorizaciones, ServicioResultados
 from .visitors import ColeccionResultados, InformeTextoVisitor, ResumenVisitor
 import os
 
+from datetime import date, datetime, timedelta
+
+from .forms import ReevaluarTriajeForm, TriajeForm  # súmalos a tu bloque de .forms
+from .models import Triaje  # súmalo a tu import de .models
+from .servicios import ErrorServicio, ErrorTriaje, ServicioAutorizaciones, ServicioResultados, ServicioTriaje
+from .strategies import ClasificadorTriaje
+
+
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
 # ---------------------------------------------------------------------
@@ -127,24 +135,20 @@ def registro_medico_view(request):
 # ---------------------------------------------------------------------
 # Dashboards
 # ---------------------------------------------------------------------
-
 @login_required
 def dashboard_paciente(request):
     if request.user.tipo_usuario != "paciente":
         return redirect("post_login_redirect")
 
     modulos = [
+        {"icono": "🚑", "titulo": "Evaluación de triaje", "descripcion": "Evalúa tu nivel de urgencia antes de agendar.", "url": reverse("evaluar_triaje")},
         {"icono": "📅", "titulo": "Agendar cita", "descripcion": "Reserva una cita por médico, especialidad, sede y fecha.", "url": reverse("agendar_cita")},
         {"icono": "🗓️", "titulo": "Mis citas", "descripcion": "Consulta tus citas y reagenda si faltan más de 24 horas.", "url": reverse("listar_citas")},
-        
         {"icono": "📄", "titulo": "Autorizaciones", "descripcion": "Solicita, consulta y renueva tus autorizaciones médicas.", "url": reverse("autorizaciones")},
         {"icono": "🧪", "titulo": "Resultados médicos", "descripcion": "Revisa los resultados de tus exámenes.", "url": reverse("resultados")},
-        
-        
         {"icono": "💊", "titulo": "Historial de recetas", "descripcion": "Consulta tus fórmulas médicas y renueva tratamientos crónicos.", "url": reverse("historial_recetas", args=[request.user.perfil_paciente.pk])},
     ]
     return render(request, "dashboard_paciente.html", {"modulos": modulos})
-
 
 @login_required
 def dashboard_medico(request):
@@ -154,8 +158,10 @@ def dashboard_medico(request):
     modulos = [
         {"icono": "🗓️", "titulo": "Citas del día", "descripcion": "Consulta tus citas de hoy, la semana o el mes.", "url": reverse("citas_medico")},
         {"icono": "🩺", "titulo": "Atender paciente", "descripcion": "Ve a 'Citas del día' y pulsa Atender junto a la cita que corresponda."},
+        {"icono": "💊", "titulo": "Recetas emitidas", "descripcion": "Consulta el historial de fórmulas médicas que has emitido.", "url": reverse("recetas_emitidas")},
         {"icono": "📄", "titulo": "Autorizaciones", "descripcion": "Revisa y responde las solicitudes de tus pacientes.", "url": reverse("autorizaciones")},
         {"icono": "🧪", "titulo": "Resultados médicos", "descripcion": "Registra resultados y consulta los que ya enviaste.", "url": reverse("resultados")},
+        {"icono": "📤", "titulo": "Remisiones y órdenes", "descripcion": "Remite pacientes a especialistas u ordena exámenes."},
     ]
     return render(request, "dashboard_medico.html", {"modulos": modulos})
 
@@ -170,25 +176,42 @@ def agendar_cita_view(request):
     if request.user.tipo_usuario != "paciente":
         return redirect("post_login_redirect")
 
-    if request.method == "POST" and request.POST.get("accion") == "confirmar":
-        return _confirmar_cita(request)
+    triaje = ServicioTriaje().triaje_vigente(request.user.perfil_paciente)
+    if triaje is None:
+        messages.info(request, "Antes de agendar, completa tu evaluación de triaje (vale 24 horas).")
+        return redirect("evaluar_triaje")
 
+    if request.method == "POST" and request.POST.get("accion") == "confirmar":
+        return _confirmar_cita(request, triaje)
+
+    if triaje.nivel == "emergencia":
+        return render(request, "agendar_cita.html", {"triaje": triaje, "bloqueado": True})
+
+    reglas = ConfiguracionSistema().reglas_agenda_por_nivel[triaje.nivel]
     form = BuscarHorariosForm(request.POST or None)
     franjas, busqueda = None, None
 
     if request.method == "POST" and form.is_valid():
         busqueda = form.cleaned_data
-        if busqueda["medico"]:
-            medicos = [busqueda["medico"]]
+        fecha = None if reglas["ignora_fecha"] else busqueda["fecha"]
+        max_dias = reglas["max_dias"]
+        if fecha and max_dias is not None and fecha > date.today() + timedelta(days=max_dias):
+            form.add_error("fecha", f"Por tu nivel de triaje, la cita debe ser dentro de los próximos {max_dias} días.")
+            busqueda = None
         else:
-            medicos = Medico.objects.filter(especialidad=busqueda["especialidad"]).select_related("usuario")
-        sede = busqueda["sede"] if busqueda["tipo"] == "presencial" else None
-        franjas = buscar_franjas(medicos, sede=sede, fecha=busqueda["fecha"], cantidad=12)
+            if busqueda["medico"]:
+                medicos = [busqueda["medico"]]
+            else:
+                medicos = Medico.objects.filter(especialidad=busqueda["especialidad"]).select_related("usuario")
+            sede = busqueda["sede"] if busqueda["tipo"] == "presencial" else None
+            franjas = buscar_franjas(medicos, sede=sede, fecha=fecha, cantidad=reglas["cantidad"], max_dias=max_dias)
 
-    return render(request, "agendar_cita.html", {"form": form, "franjas": franjas, "busqueda": busqueda})
+    return render(request, "agendar_cita.html", {
+        "form": form, "franjas": franjas, "busqueda": busqueda, "triaje": triaje, "reglas": reglas,
+    })
 
 
-def _confirmar_cita(request):
+def _confirmar_cita(request, triaje):
     form = ConfirmarFranjaForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Los datos del horario elegido no son válidos")
@@ -204,6 +227,7 @@ def _confirmar_cita(request):
             tipo=datos["tipo"],
             sede=datos["sede"],
             motivo=datos.get("motivo_consulta", ""),
+            triaje=triaje,
         )
     except ErrorMediador as e:
         messages.error(request, str(e))
@@ -264,8 +288,12 @@ def citas_medico_view(request):
     periodo = request.GET.get("periodo", "dia")
     agenda = AgendaCitasMedico(request.user.perfil_medico, periodo)
     dias = [(dia, citas) for dia, citas in agenda if citas or periodo == "dia"]
+    prioritarias = [
+        c for _, citas in dias for c in citas
+        if c.triaje_id and c.puede_atender and c.triaje_efectivo.nivel in ("alto", "emergencia")
+    ]
+    return render(request, "citas_medico.html", {"dias": dias, "periodo": periodo, "prioritarias": prioritarias})
 
-    return render(request, "citas_medico.html", {"dias": dias, "periodo": periodo})
 
 
 @login_required
@@ -837,3 +865,59 @@ def informe_resultados_view(request):
     respuesta = HttpResponse(visitante.texto(), content_type="text/plain; charset=utf-8")
     respuesta["Content-Disposition"] = 'attachment; filename="informe_resultados.txt"'
     return respuesta
+
+
+@login_required
+def evaluar_triaje_view(request):
+    if request.user.tipo_usuario != "paciente":
+        return redirect("post_login_redirect")
+
+    form = TriajeForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        triaje = ServicioTriaje().evaluar_paciente(request.user.perfil_paciente, form.a_datos(request.user.edad))
+        return redirect("resultado_triaje", triaje_id=triaje.pk)
+
+    return render(request, "evaluar_triaje.html", {
+        "form": form, "horas_validez": ConfiguracionSistema().horas_validez_triaje,
+    })
+
+
+@login_required
+def resultado_triaje_view(request, triaje_id):
+    triaje = get_object_or_404(Triaje.objects.select_related("paciente__usuario"), pk=triaje_id)
+    if not ServicioTriaje.puede_ver(request.user, triaje):
+        raise Http404
+    return render(request, "resultado_triaje.html", {
+        "triaje": triaje, "es_paciente": request.user.tipo_usuario == "paciente",
+    })
+
+
+@login_required
+def evaluar_medico_view(request, cita_id):
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
+
+    medico = request.user.perfil_medico
+    cita = get_object_or_404(Cita.objects.select_related("paciente__usuario", "triaje"), pk=cita_id, medico=medico)
+    origen = cita.triaje
+    if origen is None:
+        messages.info(request, "Esta cita no tiene autoevaluación de triaje.")
+        return redirect("citas_medico")
+
+    if request.method == "POST":
+        form = ReevaluarTriajeForm(request.POST)
+        if form.is_valid():
+            try:
+                ServicioTriaje().reevaluar_medico(medico, origen, form.cleaned_data["metodo"])
+            except ErrorTriaje as e:
+                messages.error(request, str(e))
+            else:
+                messages.success(request, "Reevaluación guardada. La autoevaluación del paciente se conserva.")
+        return redirect("evaluar_medico", cita_id=cita.id)
+
+    return render(request, "evaluar_medico.html", {
+        "cita": cita,
+        "origen": origen,
+        "efectivo": origen.efectivo,
+        "filas": ClasificadorTriaje().comparar(origen.datos),
+    })

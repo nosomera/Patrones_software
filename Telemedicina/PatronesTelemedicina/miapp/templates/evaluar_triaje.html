@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Evaluación de triaje{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-1">Evaluación de triaje</h1>
+<p class="text-muted">Esta evaluación orienta y <strong>no reemplaza una valoración médica</strong>. Vale {{ horas_validez }} horas y sirve para una sola cita.</p>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+
+      <h6 class="text-danger fw-bold">¿Presentas alguna señal de alarma?</h6>
+      {% include "_checks.html" with field=form.alarmas %}
+
+      <h6 class="text-secondary fw-bold mt-3">Síntomas</h6>
+      {% include "_checks.html" with field=form.sintomas %}
+      {% include "_form_field.html" with field=form.intensidad %}
+
+      <h6 class="text-secondary fw-bold mt-3">Signos vitales <span class="fw-normal text-muted">(opcional: todos o ninguno)</span></h6>
+      <div class="row">
+        {% for f in form.campos_vitales %}<div class="col-md-4">{% include "_form_field.html" with field=f %}</div>{% endfor %}
+      </div>
+
+      <h6 class="text-secondary fw-bold mt-3">Condiciones de riesgo</h6>
+      {% include "_checks.html" with field=form.factores_riesgo %}
+
+      <button type="submit" class="btn btn-primary w-100 fw-bold py-2 mt-2">Evaluar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

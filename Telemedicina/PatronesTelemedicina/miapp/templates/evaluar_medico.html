@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Triaje del paciente{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="fw-bold text-primary fs-3 mb-0">Triaje de {{ cita.paciente.usuario.nombre_completo }}</h1>
+  <a href="{% url 'citas_medico' %}" class="btn btn-outline-secondary btn-sm">Volver</a>
+</div>
+
+<div class="alert alert-{{ origen.color_nivel }}">
+  Autoevaluación del paciente: <strong>{{ origen.etiqueta_nivel }}</strong> ({{ origen.metodo_nombre }}, {{ origen.puntaje }} pts)
+</div>
+{% if efectivo.pk != origen.pk %}
+  <div class="alert alert-{{ efectivo.color_nivel }}">
+    Tu reevaluación vigente: <strong>{{ efectivo.etiqueta_nivel }}</strong> ({{ efectivo.metodo_nombre }}, {{ efectivo.fecha|date:"d/m H:i" }})
+  </div>
+{% endif %}
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <h5 class="text-secondary mb-3">Los mismos datos con cada método</h5>
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead><tr><th>Método</th><th>Nivel</th><th>Puntaje</th><th>Detalle</th><th></th></tr></thead>
+        <tbody>
+          {% for est, res in filas %}
+            <tr>
+              <td>{{ est.nombre }}{% if est.codigo == origen.metodo %} <span class="badge bg-secondary">usado</span>{% endif %}</td>
+              {% if res %}
+                <td><span class="badge bg-{{ res.color }}">{{ res.etiqueta }}</span></td>
+                <td>{{ res.puntaje }}</td>
+                <td class="small">{% for r in res.razones %}{{ r }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+                <td>
+                  <form method="post">{% csrf_token %}
+                    <input type="hidden" name="metodo" value="{{ est.codigo }}">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Usar este método</button>
+                  </form>
+                </td>
+              {% else %}
+                <td colspan="4" class="text-muted small">No aplica: faltan signos vitales del paciente.</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small text-muted mb-0">Los umbrales son didácticos y no reemplazan el criterio clínico.</p>
+  </div>
+</div>
+{% endblock %}

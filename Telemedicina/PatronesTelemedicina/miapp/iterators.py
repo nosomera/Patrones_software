@@ -25,7 +25,7 @@ class AgendaMedico:
     """Colección: la agenda de un médico. No guarda las franjas, solo sabe
     crear el iterador que las recorre."""
 
-    def __init__(self, medico, sede=None, desde=None, hasta=None):
+    def __init__(self, medico, sede=None, desde=None, hasta=None, max_dias=None):
         config = ConfiguracionSistema()
         self.medico = medico
         self.sede = sede
@@ -33,8 +33,8 @@ class AgendaMedico:
 
         primer_dia_posible = self.limite.date()
         self.fecha_inicio = max(desde, primer_dia_posible) if desde else primer_dia_posible
-        self.fecha_fin = hasta or (self.fecha_inicio + timedelta(days=config.dias_ventana_agenda))
-
+        dias = max_dias if max_dias is not None else config.dias_ventana_agenda
+        self.fecha_fin = hasta or (self.fecha_inicio + timedelta(days=dias))
     def __iter__(self):
         return IteradorFranjasLibres(self)
 
@@ -106,13 +106,17 @@ class IteradorFranjasLibres:
             dia += timedelta(days=1)
 
 
-def buscar_franjas(medicos, sede=None, fecha=None, cantidad=10):
+def buscar_franjas(medicos, sede=None, fecha=None, cantidad=10, max_dias=None):
     """Junta las agendas de varios médicos en una sola secuencia ordenada
-    por fecha y hora, y toma solo las primeras `cantidad`.
+    por fecha y hora y toma solo las primeras `cantidad`.
     Con fecha=None equivale a 'lo antes posible'."""
-    iteradores = [iter(AgendaMedico(m, sede=sede, desde=fecha, hasta=fecha)) for m in medicos]
+    iteradores = [
+        iter(AgendaMedico(m, sede=sede, desde=fecha, hasta=fecha, max_dias=max_dias))
+        for m in medicos
+    ]
     combinadas = heapq.merge(*iteradores, key=lambda f: (f.fecha, f.hora))
     return list(islice(combinadas, cantidad))
+
 
 
 # ---------------------------------------------------------------------

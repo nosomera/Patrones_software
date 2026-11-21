@@ -1,14 +1,87 @@
 from datetime import date, timedelta
-
+import json
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Autorizacion, Cita, ResultadoMedico
+from .strategies import ClasificadorTriaje
+from .models import Autorizacion, Cita, ResultadoMedico, Triaje  
 from .observers import (
     AUTORIZACION_APROBADA, AUTORIZACION_RECHAZADA, AUTORIZACION_SOLICITADA,
     RESULTADO_CONSULTADO, RESULTADO_REGISTRADO, Evento, PublicadorEventos,
 )
 from .singleton import ConfiguracionSistema
+
+
+
+
+class ErrorTriaje(Exception):
+    """Regla de triaje incumplida. El mensaje se le muestra al usuario."""
+
+
+class ServicioTriaje:
+    @staticmethod
+    def _guardar(paciente, datos, resultado, realizado_por, medico=None, origen=None):
+        return Triaje.objects.create(
+            paciente=paciente,
+            nivel=resultado.nivel,
+            puntaje=resultado.puntaje,
+            metodo=resultado.metodo,
+            razones="\n".join(resultado.razones),
+            datos_json=json.dumps(datos.a_dict()),
+            realizado_por=realizado_por,
+            medico=medico,
+            triaje_origen=origen,
+            usada=origen is not None,  # las reevaluaciones del médico nunca sirven para agendar
+        )
+
+    def evaluar_paciente(self, paciente, datos):
+        clasificador = ClasificadorTriaje()
+        clasificador.estrategia_automatica(datos)
+        resultado = clasificador.clasificar(datos)
+        triaje = self._guardar(paciente, datos, resultado, "paciente")
+        print(f"[Triaje] Evaluación #{triaje.pk} del paciente: nivel {triaje.nivel}")
+        return triaje
+
+    @transaction.atomic
+    def reevaluar_medico(self, medico, triaje, codigo_metodo):
+        if triaje.realizado_por != "paciente":
+            raise ErrorTriaje("Solo se reevalúa la autoevaluación del paciente")
+        if not Cita.objects.filter(medico=medico, paciente=triaje.paciente).exists():
+            raise ErrorTriaje("No tienes citas con este paciente")
+        estrategia = ClasificadorTriaje.estrategias_disponibles().get(codigo_metodo)
+        if estrategia is None:
+            raise ErrorTriaje("Método de triaje no válido")
+        datos = triaje.datos
+        if not estrategia.puede_evaluar(datos):
+            raise ErrorTriaje("Faltan signos vitales del paciente para usar ese método")
+
+        clasificador = ClasificadorTriaje()
+        clasificador.establecer_estrategia(estrategia)
+        resultado = clasificador.clasificar(datos)
+        nuevo = self._guardar(triaje.paciente, datos, resultado, "medico", medico, triaje)
+        print(f"[Triaje] Reevaluación #{nuevo.pk} del médico: nivel {nuevo.nivel}")
+        return nuevo
+
+    @staticmethod
+    def triaje_vigente(paciente):
+        limite = timezone.now() - timedelta(hours=ConfiguracionSistema().horas_validez_triaje)
+        return (
+            Triaje.objects
+            .filter(paciente=paciente, realizado_por="paciente", usada=False, fecha__gte=limite)
+            .order_by("-fecha", "-id")
+            .first()
+        )
+
+    @staticmethod
+    def puede_ver(usuario, triaje) -> bool:
+        if usuario.tipo_usuario == "paciente":
+            return triaje.paciente_id == usuario.pk
+        if usuario.tipo_usuario == "medico":
+            return Cita.objects.filter(medico_id=usuario.pk, paciente=triaje.paciente).exists()
+        return False
+    
+
+
 
 
 class ErrorServicio(Exception):

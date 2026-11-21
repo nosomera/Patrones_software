@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Resultado del triaje{% endblock %}
+{% block content %}
+<h1 class="fw-bold text-primary mb-4">Resultado de la evaluación</h1>
+<div class="card shadow-sm border-0">
+  <div class="card-body p-4">
+    <div class="alert alert-{{ triaje.color_nivel }}">
+      <h4 class="alert-heading mb-1">Nivel: {{ triaje.etiqueta_nivel }}</h4>
+      <p class="mb-0">{{ triaje.recomendacion }}</p>
+    </div>
+    <p class="text-muted small">{{ triaje.metodo_nombre }} · Puntaje {{ triaje.puntaje }} · {{ triaje.fecha|date:"d/m/Y H:i" }} · {{ triaje.get_realizado_por_display }}</p>
+    <h6 class="text-secondary">Cómo se obtuvo este resultado</h6>
+    <ul>{% for r in triaje.lista_razones %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% if es_paciente %}
+      <div class="d-flex gap-2">
+        {% if triaje.nivel != "emergencia" and triaje.vigente %}
+          <a href="{% url 'agendar_cita' %}" class="btn btn-primary fw-bold">Continuar a agendar</a>
+        {% endif %}
+        <a href="{% url 'evaluar_triaje' %}" class="btn btn-outline-secondary">Repetir evaluación</a>
+      </div>
+    {% endif %}
+    <p class="small text-muted mt-3 mb-0">Esta evaluación orienta y no reemplaza una valoración médica.</p>
+  </div>
+</div>
+{% endblock %}

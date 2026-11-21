@@ -5,6 +5,8 @@ from django.contrib.auth.models import PermissionsMixin
 from django.db import models
 from django.utils import timezone
 
+import json
+from datetime import date, timedelta
 
 class UsuarioManager(BaseUserManager):
     use_in_migrations = True
@@ -168,6 +170,13 @@ class Cita(models.Model):
     cancelada_por = models.ForeignKey(
         Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name="citas_canceladas"
     )
+    triaje = models.ForeignKey(
+        "Triaje", on_delete=models.SET_NULL, null=True, blank=True, related_name="citas"
+    )
+    
+    @property
+    def triaje_efectivo(self):
+        return self.triaje.efectivo if self.triaje_id else None
 
 
     def __str__(self):
@@ -465,3 +474,68 @@ class RegistroAuditoria(models.Model):
 
     def __str__(self):
         return f"{self.fecha:%d/%m/%Y %H:%M} - {self.descripcion}"
+    
+    
+class Triaje(models.Model):
+    NIVEL_CHOICES = [("bajo", "Bajo"), ("medio", "Medio"), ("alto", "Alto"), ("emergencia", "Emergencia")]
+    REALIZADO_CHOICES = [("paciente", "Paciente"), ("medico", "Médico")]
+
+    paciente = models.ForeignKey(Paciente, on_delete=models.CASCADE, related_name="triajes")
+    nivel = models.CharField(max_length=12, choices=NIVEL_CHOICES)
+    puntaje = models.IntegerField()
+    metodo = models.CharField(max_length=20)
+    razones = models.TextField(blank=True)
+    datos_json = models.TextField(blank=True)
+    realizado_por = models.CharField(max_length=10, choices=REALIZADO_CHOICES, default="paciente")
+    medico = models.ForeignKey(Medico, on_delete=models.SET_NULL, null=True, blank=True, related_name="triajes_realizados")
+    triaje_origen = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="reevaluaciones"
+    )
+    fecha = models.DateTimeField(auto_now_add=True)
+    usada = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"Triaje #{self.pk} - {self.paciente} ({self.nivel})"
+
+    @property
+    def datos(self):
+        from .strategies import DatosTriaje
+        return DatosTriaje.desde_dict(json.loads(self.datos_json or "{}"))
+
+    @property
+    def etiqueta_nivel(self):
+        from .strategies import NIVELES
+        return NIVELES[self.nivel][0]
+
+    @property
+    def color_nivel(self):
+        from .strategies import NIVELES
+        return NIVELES[self.nivel][1]
+
+    @property
+    def metodo_nombre(self):
+        from .strategies import ClasificadorTriaje
+        return ClasificadorTriaje.estrategias_disponibles()[self.metodo].nombre
+
+    @property
+    def lista_razones(self):
+        return [r for r in self.razones.splitlines() if r]
+
+    @property
+    def recomendacion(self):
+        from .singleton import ConfiguracionSistema
+        return ConfiguracionSistema().recomendaciones_triaje[self.nivel]
+
+    @property
+    def vigente(self):
+        from .singleton import ConfiguracionSistema
+        limite = self.fecha + timedelta(hours=ConfiguracionSistema().horas_validez_triaje)
+        return (not self.usada) and limite > timezone.now()
+
+    @property
+    def efectivo(self):
+        """La reevaluación más reciente del médico, o la propia si no hay."""
+        return self.reevaluaciones.order_by("-fecha", "-id").first() or self

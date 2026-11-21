@@ -5,6 +5,8 @@ from .models import Autorizacion, Cita, DetalleReceta, Especialidad, Medico, Med
 from datetime import date
 from .singleton import ConfiguracionSistema
 
+from .strategies import INTENSIDADES, ClasificadorTriaje, DatosTriaje
+
 
 class BootstrapFormMixin:
     def __init__(self, *args, **kwargs):
@@ -189,3 +191,65 @@ class RegistrarResultadoForm(BootstrapFormMixin, forms.Form):
         if not cleaned.get("archivo") and not (cleaned.get("resultado_texto") or "").strip():
             raise forms.ValidationError("Adjunta el archivo del resultado o escribe el resultado en texto")
         return cleaned
+    
+    
+class TriajeForm(BootstrapFormMixin, forms.Form):
+    alarmas = forms.MultipleChoiceField(required=False, widget=forms.CheckboxSelectMultiple)
+    sintomas = forms.MultipleChoiceField(required=False, widget=forms.CheckboxSelectMultiple)
+    intensidad = forms.TypedChoiceField(
+        choices=[(k, v.capitalize()) for k, v in INTENSIDADES.items()],
+        coerce=int, initial=1, label="Intensidad general de los síntomas",
+    )
+    factores_riesgo = forms.MultipleChoiceField(required=False, widget=forms.CheckboxSelectMultiple)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        config = ConfiguracionSistema()
+        self.fields["alarmas"].choices = list(config.sintomas_alarma.items())
+        self.fields["sintomas"].choices = [(c, v[0]) for c, v in config.sintomas_triaje.items()]
+        self.fields["factores_riesgo"].choices = [(c, v[0]) for c, v in config.factores_riesgo_triaje.items()]
+        for nombre in ("alarmas", "sintomas", "factores_riesgo"):
+            self.fields[nombre].widget.attrs["class"] = "form-check-input"
+        for clave, r in config.rangos_signos_vitales.items():
+            minimo, maximo = r["limites"]
+            self.fields[f"vital_{clave}"] = forms.FloatField(
+                required=False, min_value=minimo, max_value=maximo,
+                label=f"{r['etiqueta']} ({r['unidad']})",
+                widget=forms.NumberInput(attrs={"class": "form-control", "step": "any"}),
+            )
+
+    @property
+    def campos_vitales(self):
+        return [self[f"vital_{c}"] for c in ConfiguracionSistema().rangos_signos_vitales]
+
+    def clean(self):
+        cleaned = super().clean()
+        claves = ConfiguracionSistema().rangos_signos_vitales
+        informados = [cleaned.get(f"vital_{c}") for c in claves if cleaned.get(f"vital_{c}") is not None]
+        if informados and len(informados) < len(claves):
+            raise forms.ValidationError("Completa todos los signos vitales o deja todos vacíos.")
+        if not (cleaned.get("sintomas") or cleaned.get("alarmas") or informados):
+            raise forms.ValidationError("Marca al menos un síntoma o ingresa tus signos vitales.")
+        return cleaned
+
+    def a_datos(self, edad):
+        c = self.cleaned_data
+        claves = ConfiguracionSistema().rangos_signos_vitales
+        return DatosTriaje(
+            sintomas=list(c.get("sintomas", [])),
+            alarmas=list(c.get("alarmas", [])),
+            intensidad=c.get("intensidad") or 1,
+            signos_vitales={k: c[f"vital_{k}"] for k in claves if c.get(f"vital_{k}") is not None},
+            edad=edad,
+            factores_riesgo=list(c.get("factores_riesgo", [])),
+        )
+
+
+class ReevaluarTriajeForm(BootstrapFormMixin, forms.Form):
+    metodo = forms.ChoiceField(label="Método de clasificación")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["metodo"].choices = [
+            (c, e.nombre) for c, e in ClasificadorTriaje.estrategias_disponibles().items()
+        ]

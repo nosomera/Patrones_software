@@ -1,0 +1,13 @@
+<div class="mb-3">
+  <div class="row">
+    {% for c in field %}
+      <div class="col-md-6">
+        <div class="form-check">
+          {{ c.tag }}
+          <label class="form-check-label" for="{{ c.id_for_label }}">{{ c.choice_label }}</label>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+</div>
