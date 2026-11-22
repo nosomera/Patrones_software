@@ -10,12 +10,25 @@ from .models import (
     Sede, Cita, DisponibilidadMedica, Consulta, Receta, DetalleReceta,Notificacion,MensajeChat,Autorizacion, ResultadoMedico, RegistroAuditoria
 )
 
+from .commands import *
+
 @admin.register(RegistroAuditoria)
 class RegistroAuditoriaAdmin(admin.ModelAdmin):
     list_display = ("fecha", "usuario", "evento", "descripcion", "objeto")
     list_filter = ("evento",)
     readonly_fields = ("usuario", "evento", "descripcion", "objeto", "fecha")
 
+@admin.register(RegistroComando)
+class RegistroComandoAdmin(admin.ModelAdmin):
+    list_display = ("fecha", "usuario", "tipo", "descripcion", "estado", "lote")
+    list_filter = ("tipo", "estado")
+    readonly_fields = [f.name for f in RegistroComando._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 class UsuarioAdmin(UserAdmin):
     model = Usuario

@@ -11,7 +11,6 @@ from .singleton import ConfiguracionSistema
 from .states import CitaContexto, TransicionInvalida
 
 
-
 class ErrorMediador(Exception):
     """Regla de negocio incumplida. El mensaje se le muestra al usuario."""
 
@@ -23,14 +22,15 @@ def rol_en_cita(cita, usuario):
         return "paciente"
     if usuario.tipo_usuario == "medico" and cita.medico_id == usuario.pk:
         return "medico"
-    
-    def _exigir(cita, accion):
-      try:
-        CitaContexto(cita).exigir(accion)
-      except TransicionInvalida as e:
-        raise ErrorMediador(str(e))
-    
     return None
+
+
+def _exigir(cita, accion):
+    """Le pregunta al State si la acción está permitida en el estado actual de la cita."""
+    try:
+        CitaContexto(cita).exigir(accion)
+    except TransicionInvalida as e:
+        raise ErrorMediador(str(e))
 
 
 # =====================================================================
@@ -103,7 +103,7 @@ class FabricaCitas(Colega):
 
 
 class RegistroCambios(Colega):
-    """Colega: aplica los cambios a una cita y deja constancia (usa el Memento)."""
+    """Colega: aplica los cambios a una cita y deja constancia (usa Memento y State)."""
 
     def reagendar(self, usuario, cita, nueva_fecha, nueva_hora, motivo):
         originator = CitaReagendable(cita)
@@ -117,10 +117,37 @@ class RegistroCambios(Colega):
         print(f"[Mediator] Cambios: la cita #{cita.id} quedó cancelada")
         self._mediador.notificar(self, "cita_cancelada", {"cita": cita, "actor": usuario})
 
+    def deshacer_agendamiento(self, usuario, cita):
+        CitaContexto(cita).cancelar(usuario, "Agendamiento deshecho por el paciente")
+        print(f"[Mediator] Cambios: se deshizo el agendamiento de la cita #{cita.id}")
+        self._mediador.notificar(self, "accion_deshecha", {
+            "cita": cita, "actor": usuario,
+            "detalle": f"deshizo el agendamiento de la cita del {cita.fecha:%d/%m/%Y} a las {cita.hora:%H:%M}.",
+        })
+
+    def restaurar_fecha(self, usuario, cita, fecha, hora):
+        originator = CitaReagendable(cita)
+        memento = originator.crear_memento()            # el Memento sigue registrando cada cambio
+        originator.reagendar(fecha, hora)
+        HistorialReagendamientos(cita).registrar(memento, usuario, "Reagendamiento deshecho")
+        print(f"[Mediator] Cambios: la cita #{cita.id} volvió a {fecha} {hora:%H:%M}")
+        self._mediador.notificar(self, "accion_deshecha", {
+            "cita": cita, "actor": usuario,
+            "detalle": f"restauró la fecha anterior de la cita: ahora es el {cita.fecha:%d/%m/%Y} a las {cita.hora:%H:%M}.",
+        })
+
+    def reactivar(self, usuario, cita, codigo):
+        CitaContexto(cita).reactivar(codigo)
+        print(f"[Mediator] Cambios: la cita #{cita.id} fue restaurada")
+        self._mediador.notificar(self, "accion_deshecha", {
+            "cita": cita, "actor": usuario,
+            "detalle": f"restauró la cita del {cita.fecha:%d/%m/%Y} a las {cita.hora:%H:%M}.",
+        })
+
 
 class MediadorCitas(Mediador):
-    """Mediador concreto. La vista solo habla con él: él decide el orden
-    de los pasos y qué pieza participa en cada uno."""
+    """Mediador concreto. La vista (o el comando) solo habla con él: él decide
+    el orden de los pasos y qué pieza participa en cada uno."""
 
     def __init__(self):
         self.agenda = AgendaDisponibilidad(self)
@@ -128,20 +155,38 @@ class MediadorCitas(Mediador):
         self.cambios = RegistroCambios(self)
         self.notificador = Notificador(self)
 
-    # ---------------- operaciones que pide la vista ----------------
+    # ---------------- operaciones que piden las vistas y los comandos ----------------
 
     @transaction.atomic
-    def agendar_cita(self, usuario, medico, fecha, hora, tipo, sede=None, motivo=""):
+    def agendar_cita(self, usuario, medico, fecha, hora, tipo, sede=None, motivo="", triaje=None):
         print(f"[Mediator] Solicitud: agendar cita con Dr(a). {medico.usuario.nombre_completo} el {fecha} {hora:%H:%M}")
         if usuario.tipo_usuario != "paciente":
             raise ErrorMediador("Solo un paciente puede agendar una cita")
+        if triaje is not None and triaje.nivel == "emergencia":
+            raise ErrorMediador("Por tu nivel de triaje no puedes agendar: acude a urgencias o llama a la línea 123.")
         if tipo == "presencial" and sede is None:
             raise ErrorMediador("Una cita presencial necesita sede")
 
         sede = sede if tipo == "presencial" else None
         if not self.agenda.franja_libre(medico, fecha, hora, sede):
             raise ErrorMediador("Ese horario acaba de ocuparse. Busca de nuevo y elige otro.")
-        return self.fabrica.crear(usuario, medico, fecha, hora, tipo, sede, motivo)
+
+        cita = self.fabrica.crear(usuario, medico, fecha, hora, tipo, sede, motivo)
+
+        if triaje is not None:
+            cita.triaje = triaje
+            cita.save(update_fields=["triaje"])
+            triaje.usada = True  # una evaluación sirve para una sola cita
+            triaje.save(update_fields=["usada"])
+            print(f"[Mediator] Triaje #{triaje.pk} ({triaje.nivel}) adjunto a la cita #{cita.id}")
+            if triaje.nivel == "alto":
+                self.notificador.avisar(
+                    medico.usuario, "cita_agendada",
+                    f"Prioridad alta: {usuario.nombre_completo} llegó con triaje nivel alto "
+                    f"(cita del {fecha:%d/%m/%Y} a las {hora:%H:%M}).",
+                    cita,
+                )
+        return cita
 
     def validar_reagendar(self, usuario, cita):
         rol = rol_en_cita(cita, usuario)
@@ -156,7 +201,14 @@ class MediadorCitas(Mediador):
                 )
         return rol
 
-
+    @transaction.atomic
+    def reagendar_cita(self, usuario, cita, nueva_fecha, nueva_hora, motivo=""):
+        print(f"[Mediator] Solicitud: reagendar la cita #{cita.id} a {nueva_fecha} {nueva_hora:%H:%M}")
+        self.validar_reagendar(usuario, cita)
+        if not self.agenda.franja_libre(cita.medico, nueva_fecha, nueva_hora, cita.sede):
+            raise ErrorMediador("Ese horario no está disponible para este médico. Elige otro dentro de su agenda.")
+        self.cambios.reagendar(usuario, cita, nueva_fecha, nueva_hora, motivo)
+        return cita
 
     def validar_cancelar(self, usuario, cita):
         rol = rol_en_cita(cita, usuario)
@@ -171,6 +223,16 @@ class MediadorCitas(Mediador):
                     f"Solo puedes cancelar con más de {config.horas_minimas_cancelar} horas de anticipación"
                 )
         return rol
+
+    @transaction.atomic
+    def cancelar_cita(self, usuario, cita, motivo=""):
+        print(f"[Mediator] Solicitud: cancelar la cita #{cita.id}")
+        rol = self.validar_cancelar(usuario, cita)
+        motivo = (motivo or "").strip()
+        if rol == "medico" and not motivo:
+            raise ErrorMediador("El médico debe indicar el motivo de la cancelación")
+        self.cambios.cancelar(usuario, cita, motivo)
+        return cita
 
     def validar_atender(self, usuario, cita):
         if rol_en_cita(cita, usuario) != "medico":
@@ -197,6 +259,39 @@ class MediadorCitas(Mediador):
             raise ErrorMediador(str(e))
         return cita
 
+    # ---------------- operaciones para deshacer (las usan los comandos) ----------------
+
+    @transaction.atomic
+    def deshacer_agendamiento(self, usuario, cita):
+        print(f"[Mediator] Solicitud: deshacer el agendamiento de la cita #{cita.id}")
+        if rol_en_cita(cita, usuario) != "paciente":
+            raise ErrorMediador("Solo el paciente que agendó la cita puede deshacerla")
+        _exigir(cita, "cancelar")
+        self.cambios.deshacer_agendamiento(usuario, cita)
+        return cita
+
+    @transaction.atomic
+    def restaurar_fecha(self, usuario, cita, fecha, hora):
+        print(f"[Mediator] Solicitud: restaurar la fecha anterior de la cita #{cita.id}")
+        if rol_en_cita(cita, usuario) is None:
+            raise ErrorMediador("No tienes permiso sobre esta cita")
+        _exigir(cita, "reagendar")
+        if not self.agenda.franja_libre(cita.medico, fecha, hora, cita.sede):
+            raise ErrorMediador("El horario anterior ya no está disponible: no se puede deshacer.")
+        self.cambios.restaurar_fecha(usuario, cita, fecha, hora)
+
+    @transaction.atomic
+    def reactivar_cita(self, usuario, cita, codigo_estado):
+        print(f"[Mediator] Solicitud: restaurar la cita #{cita.id}")
+        if rol_en_cita(cita, usuario) is None:
+            raise ErrorMediador("No tienes permiso sobre esta cita")
+        _exigir(cita, "reactivar")
+        if not self.agenda.franja_libre(cita.medico, cita.fecha, cita.hora, cita.sede):
+            raise ErrorMediador(
+                "Ese horario ya no está disponible (otra persona lo tomó o ya está muy próximo): no se puede restaurar."
+            )
+        self.cambios.reactivar(usuario, cita, codigo_estado)
+
     # ---------------- eventos que reportan los colegas ----------------
 
     def notificar(self, emisor, evento, datos):
@@ -222,6 +317,11 @@ class MediadorCitas(Mediador):
             if cita.motivo_cancelacion:
                 texto += f" Motivo: {cita.motivo_cancelacion}"
             self.notificador.avisar(self._la_otra_parte(cita, actor), "cita_cancelada", texto, cita)
+
+        elif evento == "accion_deshecha":
+            self.notificador.avisar(
+                self._la_otra_parte(cita, actor), "accion_deshecha",
+                f"{actor.nombre_completo} {datos['detalle']}", cita)
 
     @staticmethod
     def _la_otra_parte(cita, actor):

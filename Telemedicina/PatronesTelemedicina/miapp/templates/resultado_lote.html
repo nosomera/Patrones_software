@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Resultado del lote{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="fw-bold text-primary fs-3 mb-0">Resultado del lote</h1>
+  <a href="{% url 'autorizaciones' %}" class="btn btn-outline-secondary btn-sm">Volver a autorizaciones</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6"><div class="card shadow-sm border-0 text-center p-3">
+    <div class="fs-3 fw-bold text-success">{{ exitos|length }}</div>
+    <small class="text-muted">{% if accion == "aprobar" %}Aprobadas{% else %}Rechazadas{% endif %}</small>
+  </div></div>
+  <div class="col-6"><div class="card shadow-sm border-0 text-center p-3">
+    <div class="fs-3 fw-bold text-danger">{{ fallos|length }}</div>
+    <small class="text-muted">Con error</small>
+  </div></div>
+</div>
+
+{% if exitos %}
+<div class="card shadow-sm border-0 mb-3"><div class="card-body p-4">
+  <h6 class="text-secondary mb-2">Procesadas correctamente</h6>
+  <ul class="mb-0">{% for a in exitos %}<li>{{ a.descripcion }} — {{ a.paciente.usuario.nombre_completo }}</li>{% endfor %}</ul>
+  <p class="small text-muted mt-2 mb-0">Cada paciente fue notificado. Estas acciones no se pueden deshacer.</p>
+</div></div>
+{% endif %}
+
+{% if fallos %}
+<div class="card shadow-sm border-0"><div class="card-body p-4">
+  <h6 class="text-secondary mb-2">No se pudieron procesar</h6>
+  <ul class="mb-0">{% for a, motivo in fallos %}<li>{{ a.descripcion }} — {{ a.paciente.usuario.nombre_completo }}: <span class="text-danger">{{ motivo }}</span></li>{% endfor %}</ul>
+</div></div>
+{% endif %}
+{% endblock %}

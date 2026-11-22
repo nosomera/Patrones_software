@@ -337,6 +337,7 @@ class Notificacion(models.Model):
         ("aut_aprobada", "Autorización aprobada"),
         ("aut_rechazada", "Autorización rechazada"),
         ("resultado_nuevo", "Resultado médico disponible"),
+        ("accion_deshecha", "Acción deshecha"),
     ]
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="notificaciones")
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
@@ -551,3 +552,69 @@ class CatalogoCIE(models.Model):
 
     def __str__(self):
         return f"{self.codigo} - {self.descripcion[:50]}"
+    
+class RegistroComando(models.Model):
+    TIPO_CHOICES = [
+        ("agendar_cita", "Agendar cita"),
+        ("reagendar_cita", "Reagendar cita"),
+        ("cancelar_cita", "Cancelar cita"),
+        ("aprobar_autorizacion", "Aprobar autorización"),
+        ("rechazar_autorizacion", "Rechazar autorización"),
+        ("lote", "Lote de acciones"),
+    ]
+    ESTADO_CHOICES = [("ejecutado", "Ejecutado"), ("deshecho", "Deshecho")]
+
+    tipo = models.CharField(max_length=30, choices=TIPO_CHOICES)
+    usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name="comandos_ejecutados")
+    cita = models.ForeignKey(Cita, on_delete=models.SET_NULL, null=True, blank=True, related_name="comandos")
+    autorizacion = models.ForeignKey(
+        Autorizacion, on_delete=models.SET_NULL, null=True, blank=True, related_name="comandos"
+    )
+    descripcion = models.CharField(max_length=255)
+    datos_json = models.TextField(blank=True)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default="ejecutado")
+    reversible = models.BooleanField(default=False)
+    lote = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, related_name="hijos")
+    fecha = models.DateTimeField(auto_now_add=True)
+    fecha_deshecho = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"{self.fecha:%d/%m/%Y %H:%M} - {self.descripcion[:60]}"
+
+    @property
+    def datos(self):
+        return json.loads(self.datos_json or "{}")
+
+    @property
+    def segundos_restantes(self):
+        from .singleton import ConfiguracionSistema
+        limite = self.fecha + timedelta(minutes=ConfiguracionSistema().minutos_ventana_deshacer)
+        return max(0, int((limite - timezone.now()).total_seconds()))
+
+    @property
+    def minutos_restantes(self):
+        return (self.segundos_restantes + 59) // 60
+
+    @property
+    def expirado(self):
+        """Se calcula por la hora y no se guarda, igual que 'vencida' en las recetas."""
+        return self.segundos_restantes == 0
+
+    def motivo_bloqueo(self, usuario):
+        """None si se puede deshacer; si no, el motivo para mostrarle al usuario."""
+        if self.usuario_id != usuario.pk:
+            return "Solo quien ejecutó la acción puede deshacerla"
+        if self.estado != "ejecutado":
+            return "Esta acción ya fue deshecha"
+        if not self.reversible:
+            return "Esta acción no se puede deshacer"
+        if self.expirado:
+            return "Se acabó el tiempo para deshacer esta acción"
+        if self.cita_id and RegistroComando.objects.filter(
+            cita_id=self.cita_id, estado="ejecutado", id__gt=self.id
+        ).exists():
+            return "Hubo cambios posteriores en esta cita: solo se deshace la acción más reciente"
+        return None

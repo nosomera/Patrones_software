@@ -18,6 +18,7 @@ FRASES_CITA = {
     "atender": "atender la cita",
     "finalizar": "finalizar la atención",
     "no_asistio": "marcar la cita como no asistida",
+    "reactivar": "restaurar la cita",
 }
 
 
@@ -51,6 +52,9 @@ class EstadoCita(ABC):
 
     def marcar_no_asistio(self, ctx):
         self.rechazar("no_asistio")
+        
+    def reactivar(self, ctx, codigo):
+        self.rechazar("reactivar")
 
 
 class _CitaActiva(EstadoCita):
@@ -120,6 +124,15 @@ class CitaCancelada(EstadoCita):
     etiqueta = "Cancelada"
     descripcion = "fue cancelada"
     color = "danger"
+    acciones = frozenset({"reactivar"})
+
+    def reactivar(self, ctx, codigo):
+        if codigo not in ("agendada", "reagendada"):
+            raise TransicionInvalida("Solo se puede restaurar una cita a un estado activo.")
+        ctx.cita.motivo_cancelacion = ""
+        ctx.cita.cancelada_por = None
+        ctx.cambiar_a(codigo)
+        
 
 
 class CitaNoAsistio(EstadoCita):
@@ -170,6 +183,9 @@ class CitaContexto:
         self.cita.save()
         self.estado = ESTADOS_CITA[codigo]()
         print(f"[State] Cita #{self.cita.id}: {anterior} -> {codigo}")
+    
+    def reactivar(self, codigo):
+        self.estado.reactivar(self, codigo)
 
 
 # =====================================================================

@@ -119,9 +119,14 @@ class ConsultaForm(BootstrapFormMixin, forms.Form):
     enfermedad_actual = forms.CharField(widget=forms.Textarea, label="Enfermedad actual / anamnesis")
     diagnostico = forms.CharField(widget=forms.Textarea, label="Diagnóstico")
 
-
+class MedicinaChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        presentacion = f" · {obj.presentacion}" if obj.presentacion else ""
+        return f"{obj.nombre} {obj.concentracion}{presentacion} — {obj.principio_activo}"
+    
+    
 class MedicamentoRecetaForm(BootstrapFormMixin, forms.Form):
-    medicamento = forms.ModelChoiceField(queryset=Medicina.objects.all(), required=False)
+    medicamento = MedicinaChoiceField(queryset=Medicina.objects.order_by("nombre"), required=False)
     dosis = forms.CharField(max_length=50, required=False)
     via_administracion = forms.ChoiceField(choices=[("", "---")] + DetalleReceta.VIA_CHOICES, required=False)
     frecuencia = forms.CharField(max_length=100, required=False)

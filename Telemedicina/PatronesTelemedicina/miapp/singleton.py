@@ -78,6 +78,10 @@ class ConfiguracionSistema:
         self.max_caracteres_mensaje = 1000
         self.segundos_refresco_chat = 5
         
+        # Command: acciones con deshacer
+        self.minutos_ventana_deshacer = 15
+        self.max_lote_autorizaciones = 25
+        
         # Template Method: importación de catálogos
         self.max_tamanio_importacion_mb = 10
         self.max_filas_importacion = 5000

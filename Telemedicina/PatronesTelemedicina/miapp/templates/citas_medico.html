@@ -8,6 +8,8 @@
   <a href="?periodo=mes" class="btn btn-outline-primary {% if periodo == 'mes' %}active{% endif %}">Mes</a>
 </div>
 
+{% include "_acciones_recientes.html" %}
+
 {% if prioritarias %}
 <div class="alert alert-danger">
   <h6 class="fw-bold mb-2">Pacientes prioritarios</h6>

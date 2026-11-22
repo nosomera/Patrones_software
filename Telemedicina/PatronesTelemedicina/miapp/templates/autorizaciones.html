@@ -7,22 +7,45 @@
     <a href="{% url 'solicitar_autorizacion' %}" class="btn btn-primary fw-bold">+ Solicitar autorización</a>
   {% endif %}
 </div>
+
+{% if es_medico %}<form method="post" action="{% url 'lote_autorizaciones' %}">{% csrf_token %}{% endif %}
 <div class="card shadow-sm border-0">
   <div class="card-body p-4">
+
+    {% if hay_pendientes %}
+    <div class="border rounded p-3 mb-3 bg-light">
+      <div class="form-check mb-2">
+        <input type="checkbox" class="form-check-input" id="marcar-todas">
+        <label class="form-check-label fw-semibold" for="marcar-todas">Seleccionar todas las pendientes</label>
+      </div>
+      <input type="text" name="respuesta" maxlength="255" class="form-control mb-2"
+             placeholder="Observación para el paciente (obligatoria para rechazar)">
+      <div class="d-flex gap-2">
+        <button type="submit" name="accion" value="rechazar" class="btn btn-outline-danger">Rechazar seleccionadas</button>
+        <button type="submit" name="accion" value="aprobar" class="btn btn-success">Aprobar seleccionadas</button>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="list-group list-group-flush">
       {% for a in autorizaciones %}
         <div class="list-group-item py-3">
           <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-            <div>
-              <h6 class="mb-1 fw-bold">{{ a.descripcion }}</h6>
-              <small class="text-muted">
-                {{ a.get_tipo_display }} ·
-                {% if es_medico %}Paciente: {{ a.paciente.usuario.nombre_completo }}{% else %}Dr(a). {{ a.medico.usuario.nombre_completo }}{% endif %}
-                · Solicitada el {{ a.fecha_solicitud|date:"d/m/Y" }}
-                {% if a.fecha_vencimiento %}· Vence el {{ a.fecha_vencimiento|date:"d/m/Y" }}{% endif %}
-              </small>
-              {% if a.respuesta %}<div class="small text-muted mt-1">Respuesta: {{ a.respuesta }}</div>{% endif %}
-              {% if a.renovacion_de_id %}<div class="small text-muted">Renovación de la solicitud #{{ a.renovacion_de_id }}</div>{% endif %}
+            <div class="d-flex gap-3">
+              {% if es_medico and a.estado == "pendiente" %}
+                <input type="checkbox" name="ids" value="{{ a.id }}" class="form-check-input chk-aut mt-1">
+              {% endif %}
+              <div>
+                <h6 class="mb-1 fw-bold">{{ a.descripcion }}</h6>
+                <small class="text-muted">
+                  {{ a.get_tipo_display }} ·
+                  {% if es_medico %}Paciente: {{ a.paciente.usuario.nombre_completo }}{% else %}Dr(a). {{ a.medico.usuario.nombre_completo }}{% endif %}
+                  · Solicitada el {{ a.fecha_solicitud|date:"d/m/Y" }}
+                  {% if a.fecha_vencimiento %}· Vence el {{ a.fecha_vencimiento|date:"d/m/Y" }}{% endif %}
+                </small>
+                {% if a.respuesta %}<div class="small text-muted mt-1">Respuesta: {{ a.respuesta }}</div>{% endif %}
+                {% if a.renovacion_de_id %}<div class="small text-muted">Renovación de la solicitud #{{ a.renovacion_de_id }}</div>{% endif %}
+              </div>
             </div>
             <div class="d-flex align-items-center gap-2">
               <span class="badge bg-{{ a.color_estado }}">{{ a.etiqueta_estado }}</span>
@@ -44,4 +67,14 @@
     </div>
   </div>
 </div>
+{% if es_medico %}</form>{% endif %}
+
+<script>
+  const todas = document.getElementById("marcar-todas");
+  if (todas) {
+    todas.addEventListener("change", function () {
+      document.querySelectorAll(".chk-aut").forEach(function (c) { c.checked = todas.checked; });
+    });
+  }
+</script>
 {% endblock %}

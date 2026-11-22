@@ -42,6 +42,11 @@ from .strategies import ClasificadorTriaje
 from .forms import ImportarCatalogoForm  # súmalo a tu bloque de .forms
 from .importadores import IMPORTADORES, ErrorImportacion, obtener_importador
 
+from .commands import (
+    AgendarCitaComando, AprobarAutorizacionComando, CancelarCitaComando, ComandoLote,
+    EjecutorComandos, ErrorComando, RechazarAutorizacionComando, ReagendarCitaComando,
+)
+
 # ---------------------------------------------------------------------
 # Medicinas / Pacientes (demo original)
 # ---------------------------------------------------------------------
@@ -241,39 +246,45 @@ def _confirmar_cita(request, triaje):
     messages.success(request, f"Cita agendada para el {cita.fecha:%d/%m/%Y} a las {cita.hora:%H:%M}")
     return redirect("listar_citas")
 
-
 @login_required
 def listar_citas_view(request):
     if request.user.tipo_usuario != "paciente":
         return redirect("post_login_redirect")
-    citas = Cita.objects.filter(paciente=request.user.perfil_paciente).order_by("-fecha", "-hora")
-    return render(request, "listar_citas.html", {"citas": citas})
-
+    citas = (
+        Cita.objects.filter(paciente=request.user.perfil_paciente)
+        .select_related("medico__usuario", "especialidad", "sede", "triaje")
+        .order_by("-fecha", "-hora")
+    )
+    return render(request, "listar_citas.html", {
+        "citas": citas,
+        "acciones": EjecutorComandos().acciones_deshacibles(request.user),
+    })
+    
+    
 @login_required
 def reagendar_cita_view(request, cita_id):
     if request.user.tipo_usuario != "paciente":
         return redirect("post_login_redirect")
 
     cita = get_object_or_404(Cita, pk=cita_id, paciente=request.user.perfil_paciente)
-    mediador = MediadorCitas()
     try:
-        mediador.validar_reagendar(request.user, cita)
+        MediadorCitas().validar_reagendar(request.user, cita)
     except ErrorMediador as e:
         messages.error(request, str(e))
         return redirect("listar_citas")
 
     form = ReagendarCitaForm(request.POST or None, initial={"fecha": cita.fecha, "hora": cita.hora})
     if request.method == "POST" and form.is_valid():
+        comando = ReagendarCitaComando(
+            request.user, cita, form.cleaned_data["fecha"], form.cleaned_data["hora"],
+            form.cleaned_data.get("motivo", ""),
+        )
         try:
-            mediador.reagendar_cita(
-                request.user, cita,
-                form.cleaned_data["fecha"], form.cleaned_data["hora"],
-                form.cleaned_data.get("motivo", ""),
-            )
-        except ErrorMediador as e:
+            EjecutorComandos().ejecutar(comando)
+        except ErrorComando as e:
             form.add_error(None, str(e))
         else:
-            messages.success(request, "Cita reagendada correctamente. Se avisó al médico.")
+            messages.success(request, "Cita reagendada. Se avisó al médico y puedes deshacerlo desde Mis citas.")
             return redirect("listar_citas")
 
     return render(request, "reagendar_cita.html", {"form": form, "cita": cita})
@@ -289,6 +300,8 @@ def reagendar_cita_view(request, cita_id):
 def citas_medico_view(request):
     if request.user.tipo_usuario != "medico":
         return redirect("post_login_redirect")
+    
+    
 
     periodo = request.GET.get("periodo", "dia")
     agenda = AgendaCitasMedico(request.user.perfil_medico, periodo)
@@ -297,7 +310,10 @@ def citas_medico_view(request):
         c for _, citas in dias for c in citas
         if c.triaje_id and c.puede_atender and c.triaje_efectivo.nivel in ("alto", "emergencia")
     ]
-    return render(request, "citas_medico.html", {"dias": dias, "periodo": periodo, "prioritarias": prioritarias})
+    hay_pendientes = es_medico and any(a.estado == "pendiente" for a in lista)
+    return render(request, "autorizaciones.html", {
+        "autorizaciones": lista, "es_medico": es_medico, "hay_pendientes": hay_pendientes,
+    })
 
 
 
@@ -524,6 +540,7 @@ def historial_cambios_cita_view(request, cita_id):
     cambios = HistorialReagendamientos(cita).listar()
     return render(request, "historial_cambios.html", {"cita": cita, "cambios": cambios, "es_medico": es_medico})
 
+
 @login_required
 def cancelar_cita_view(request, cita_id):
     cita = get_object_or_404(Cita.objects.select_related("paciente__usuario", "medico__usuario"), pk=cita_id)
@@ -531,24 +548,25 @@ def cancelar_cita_view(request, cita_id):
         raise Http404
 
     destino = "citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas"
-    mediador = MediadorCitas()
     try:
-        mediador.validar_cancelar(request.user, cita)
+        MediadorCitas().validar_cancelar(request.user, cita)
     except ErrorMediador as e:
         messages.error(request, str(e))
         return redirect(destino)
 
     form = CancelarCitaForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
+        comando = CancelarCitaComando(request.user, cita, form.cleaned_data["motivo"])
         try:
-            mediador.cancelar_cita(request.user, cita, form.cleaned_data["motivo"])
-        except ErrorMediador as e:
+            EjecutorComandos().ejecutar(comando)
+        except ErrorComando as e:
             form.add_error(None, str(e))
         else:
-            messages.success(request, "Cita cancelada. Se avisó a la otra persona.")
+            messages.success(request, "Cita cancelada. Se avisó a la otra persona y puedes deshacerlo desde esta misma pantalla.")
             return redirect(destino)
 
     return render(request, "cancelar_cita.html", {"form": form, "cita": cita})
+
 
 
 @login_required
@@ -933,7 +951,7 @@ def dashboard_admin(request):
         return redirect("post_login_redirect")
     modulos = [
         {"icono": "📥", "titulo": "Importar catálogos", "descripcion": "Carga medicinas y diagnósticos desde un archivo CSV.", "url": reverse("importar_catalogo")},
-        {"icono": "🧾", "titulo": "Registros de auditoría", "descripcion": "Consulta quién hizo o vio qué en la plataforma.", "url": reverse("admin:miapp_registroauditoria_changelist")},
+        
         {"icono": "⚙️", "titulo": "Panel de administración", "descripcion": "Gestiona usuarios, sedes, especialidades y demás datos.", "url": reverse("admin:index")},
     ]
     return render(request, "dashboard_admin.html", {"modulos": modulos})
@@ -979,3 +997,61 @@ def ejemplo_catalogo_view(request, codigo):
     respuesta = HttpResponse(IMPORTADORES[codigo].contenido_ejemplo(), content_type="text/csv; charset=utf-8")
     respuesta["Content-Disposition"] = f'attachment; filename="ejemplo_{codigo}.csv"'
     return respuesta
+
+@login_required
+@require_POST
+def deshacer_accion_view(request, registro_id):
+    try:
+        registro = EjecutorComandos().deshacer(registro_id, request.user)
+    except ErrorComando as e:
+        messages.error(request, str(e))
+    else:
+        messages.success(request, f"Acción deshecha: {registro.descripcion}")
+    return redirect("citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas")
+
+
+@login_required
+@require_POST
+def lote_autorizaciones_view(request):
+    if request.user.tipo_usuario != "medico":
+        return redirect("post_login_redirect")
+
+    config = ConfiguracionSistema()
+    accion = request.POST.get("accion")
+    respuesta = (request.POST.get("respuesta") or "").strip()
+    ids = list(dict.fromkeys(int(v) for v in request.POST.getlist("ids") if v.isdigit()))
+
+    if accion not in ("aprobar", "rechazar"):
+        messages.error(request, "Acción no válida")
+    elif not ids:
+        messages.error(request, "Selecciona al menos una solicitud")
+    elif len(ids) > config.max_lote_autorizaciones:
+        messages.error(request, f"Puedes procesar hasta {config.max_lote_autorizaciones} solicitudes por vez")
+    elif accion == "rechazar" and not respuesta:
+        messages.error(request, "Indica el motivo del rechazo para las solicitudes seleccionadas")
+    else:
+        autorizaciones = list(
+            Autorizacion.objects.filter(pk__in=ids, medico=request.user.perfil_medico)
+            .select_related("paciente__usuario")
+        )
+        if not autorizaciones:
+            messages.error(request, "No se encontraron solicitudes tuyas entre las seleccionadas")
+            return redirect("autorizaciones")
+
+        clase, etiqueta = (
+            (AprobarAutorizacionComando, "Aprobó") if accion == "aprobar"
+            else (RechazarAutorizacionComando, "Rechazó")
+        )
+        lote = ComandoLote(request.user, [clase(request.user, a, respuesta) for a in autorizaciones], etiqueta)
+        try:
+            EjecutorComandos().ejecutar(lote)
+        except ErrorComando as e:
+            messages.error(request, str(e))
+            return redirect("autorizaciones")
+        return render(request, "resultado_lote.html", {
+            "accion": accion,
+            "exitos": [h.autorizacion for h in lote.exitos],
+            "fallos": [(h.autorizacion, motivo) for h, motivo in lote.fallos],
+        })
+
+    return redirect("autorizaciones")

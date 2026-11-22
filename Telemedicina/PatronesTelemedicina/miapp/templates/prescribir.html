@@ -34,4 +34,28 @@
     </form>
   </div>
 </div>
+
+<script>
+(function () {
+  document.querySelectorAll('select[name$="-medicamento"]').forEach(function (sel) {
+    const todas = Array.from(sel.options).map(function (o) { return {valor: o.value, texto: o.text}; });
+    const buscador = document.createElement("input");
+    buscador.type = "search";
+    buscador.className = "form-control form-control-sm mb-1";
+    buscador.placeholder = "Buscar por nombre o principio activo...";
+    sel.parentNode.insertBefore(buscador, sel);
+
+    buscador.addEventListener("input", function () {
+      const q = buscador.value.trim().toLowerCase();
+      const actual = sel.value;
+      sel.innerHTML = "";
+      todas
+        .filter(function (o) { return o.valor === "" || o.valor === actual || o.texto.toLowerCase().includes(q); })
+        .forEach(function (o) { sel.add(new Option(o.texto, o.valor)); });
+      sel.value = actual;
+    });
+  });
+})();
+</script>
+
 {% endblock %}

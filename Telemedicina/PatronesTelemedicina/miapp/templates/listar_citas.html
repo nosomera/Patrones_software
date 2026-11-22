@@ -5,6 +5,7 @@
   <h1 class="fw-bold text-primary mb-0">Mis citas</h1>
   <a href="{% url 'agendar_cita' %}" class="btn btn-primary fw-bold">+ Agendar cita</a>
 </div>
+{% include "_acciones_recientes.html" %}
 <div class="card shadow-sm border-0">
   <div class="card-body p-4">
     {% if citas %}
