@@ -167,11 +167,11 @@ def dashboard_medico(request):
 
     modulos = [
         {"icono": "🗓️", "titulo": "Citas del día", "descripcion": "Consulta tus citas de hoy, la semana o el mes.", "url": reverse("citas_medico")},
-        {"icono": "🩺", "titulo": "Atender paciente", "descripcion": "Ve a 'Citas del día' y pulsa Atender junto a la cita que corresponda."},
+        {"icono": "🩺", "titulo": "Atender paciente", "descripcion": "Abre tus citas y pulsa Atender junto a cada paciente.", "url": reverse("citas_medico")},
         {"icono": "💊", "titulo": "Recetas emitidas", "descripcion": "Consulta el historial de fórmulas médicas que has emitido.", "url": reverse("recetas_emitidas")},
         {"icono": "📄", "titulo": "Autorizaciones", "descripcion": "Revisa y responde las solicitudes de tus pacientes.", "url": reverse("autorizaciones")},
         {"icono": "🧪", "titulo": "Resultados médicos", "descripcion": "Registra resultados y consulta los que ya enviaste.", "url": reverse("resultados")},
-        {"icono": "📤", "titulo": "Remisiones y órdenes", "descripcion": "Remite pacientes a especialistas u ordena exámenes."},
+
     ]
     return render(request, "dashboard_medico.html", {"modulos": modulos})
 
@@ -295,13 +295,10 @@ def reagendar_cita_view(request, cita_id):
 # Citas y atención (médico)
 # ---------------------------------------------------------------------
 
-
 @login_required
 def citas_medico_view(request):
     if request.user.tipo_usuario != "medico":
         return redirect("post_login_redirect")
-    
-    
 
     periodo = request.GET.get("periodo", "dia")
     agenda = AgendaCitasMedico(request.user.perfil_medico, periodo)
@@ -310,12 +307,14 @@ def citas_medico_view(request):
         c for _, citas in dias for c in citas
         if c.triaje_id and c.puede_atender and c.triaje_efectivo.nivel in ("alto", "emergencia")
     ]
-    hay_pendientes = es_medico and any(a.estado == "pendiente" for a in lista)
-    return render(request, "autorizaciones.html", {
-        "autorizaciones": lista, "es_medico": es_medico, "hay_pendientes": hay_pendientes,
+    return render(request, "citas_medico.html", {
+        "dias": dias,
+        "periodo": periodo,
+        "prioritarias": prioritarias,
+        "acciones": EjecutorComandos().acciones_deshacibles(request.user),
     })
-
-
+    
+    
 
 @login_required
 def atender_cita_view(request, cita_id):
@@ -454,17 +453,34 @@ def historial_recetas_view(request, paciente_id):
 @login_required
 def renovar_receta_view(request, receta_id):
     receta_original = get_object_or_404(Receta, pk=receta_id)
+    paciente = receta_original.consulta.cita.paciente
+    proxy = RecetasProxy(request.user)
+
+    # 1. Permiso: el mismo control que usa el historial de recetas
+    try:
+        proxy.verificar_acceso_paciente(paciente)
+    except AccesoDenegado:
+        return redirect("post_login_redirect")
+
+    # 2. State: solo se renueva una receta emitida, dispensada o vencida
     try:
         RecetaContexto(receta_original).exigir("renovar")
     except TransicionInvalida as e:
         messages.error(request, str(e))
-        return redirect("historial_recetas", paciente_id=receta_original.consulta.cita.paciente_id)
+        return redirect("historial_recetas", paciente_id=paciente.pk)
+
+    # 3. Proxy -> Facade -> Prototype
+    try:
+        receta_nueva = proxy.renovar_receta(receta_original)
+    except AccesoDenegado as e:
+        messages.error(request, str(e))
+        return redirect("historial_recetas", paciente_id=paciente.pk)
 
     messages.success(
         request,
         f"Receta renovada: folio original {receta_original.folio} → nuevo folio {receta_nueva.folio}"
     )
-    return redirect("recetas_emitidas")
+    return redirect("historial_recetas", paciente_id=paciente.pk)
 
 
 @login_required
@@ -546,6 +562,7 @@ def cancelar_cita_view(request, cita_id):
     cita = get_object_or_404(Cita.objects.select_related("paciente__usuario", "medico__usuario"), pk=cita_id)
     if rol_en_cita(cita, request.user) is None:
         raise Http404
+
 
     destino = "citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas"
     try:
@@ -689,7 +706,6 @@ def anular_receta_view(request, receta_id):
 # ---------------------------------------------------------------------
 # Autorizaciones
 # ---------------------------------------------------------------------
-
 @login_required
 def autorizaciones_view(request):
     if request.user.tipo_usuario == "medico":
@@ -703,9 +719,13 @@ def autorizaciones_view(request):
         es_medico = False
     else:
         return redirect("post_login_redirect")
-    return render(request, "autorizaciones.html", {"autorizaciones": lista, "es_medico": es_medico})
 
-
+    hay_pendientes = es_medico and any(a.estado == "pendiente" for a in lista)
+    return render(request, "autorizaciones.html", {
+        "autorizaciones": lista, "es_medico": es_medico, "hay_pendientes": hay_pendientes,
+    })
+    
+    
 @login_required
 def solicitar_autorizacion_view(request):
     if request.user.tipo_usuario != "paciente":
