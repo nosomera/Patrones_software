@@ -1,5 +1,5 @@
 #models.py
-from datetime import date
+from datetime import date, datetime, timedelta
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
@@ -202,6 +202,32 @@ class Cita(models.Model):
     @property
     def puede_atender(self):
         return self.contexto.permite("atender")
+    
+    @property
+    def ventana_videollamada(self):
+        """(inicio, fin) del periodo en que se puede entrar a la sala."""
+        from .singleton import ConfiguracionSistema
+        config = ConfiguracionSistema()
+        momento = datetime.combine(self.fecha, self.hora)
+        return (
+            momento - timedelta(minutes=config.minutos_antes_videollamada),
+            momento + timedelta(minutes=config.minutos_despues_videollamada),
+        )
+    @property
+    def estado_videollamada(self):
+        """'no_aplica', 'proxima', 'disponible' o 'cerrada'."""
+        from .singleton import ConfiguracionSistema
+        if self.tipo != "virtual" or not self.contexto.permite("unirse"):
+            return "no_aplica"
+        if ConfiguracionSistema().videollamada_sin_restriccion_horaria:
+            return "disponible"          # modo demostración: sin ventana de tiempo
+        inicio, fin = self.ventana_videollamada
+        ahora = datetime.now()
+        if ahora < inicio:
+            return "proxima"
+        if ahora > fin:
+            return "cerrada"
+        return "disponible"
 
     @property
     def puede_marcar_no_asistio(self):
@@ -338,6 +364,7 @@ class Notificacion(models.Model):
         ("aut_rechazada", "Autorización rechazada"),
         ("resultado_nuevo", "Resultado médico disponible"),
         ("accion_deshecha", "Acción deshecha"),
+        ("videollamada", "Videollamada"),
     ]
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="notificaciones")
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)

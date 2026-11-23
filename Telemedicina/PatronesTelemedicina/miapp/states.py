@@ -19,6 +19,7 @@ FRASES_CITA = {
     "finalizar": "finalizar la atención",
     "no_asistio": "marcar la cita como no asistida",
     "reactivar": "restaurar la cita",
+    "unirse": "entrar a la videollamada",
 }
 
 
@@ -59,7 +60,7 @@ class EstadoCita(ABC):
 
 class _CitaActiva(EstadoCita):
     """Comportamiento común de una cita pendiente de atenderse."""
-    acciones = frozenset({"reagendar", "cancelar", "atender", "no_asistio"})
+    acciones = frozenset({"reagendar", "cancelar", "atender", "no_asistio", "unirse"})
 
     def reagendar(self, ctx, fecha, hora):
         ctx.cita.fecha = fecha
@@ -99,7 +100,7 @@ class CitaEnCurso(EstadoCita):
     etiqueta = "En curso"
     descripcion = "está en curso"
     color = "warning"
-    acciones = frozenset({"atender", "no_asistio"})
+    acciones = frozenset({"atender", "no_asistio", "unirse"})
 
     def iniciar_atencion(self, ctx):
         pass  # ya está en curso: volver a abrir el formulario no cambia nada

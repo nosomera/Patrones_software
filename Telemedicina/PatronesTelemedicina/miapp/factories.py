@@ -5,7 +5,7 @@ from django.db import transaction
 from .models import Cita, DisponibilidadMedica, Especialidad, Medico, Paciente, Sede, Usuario
 from .singleton import ConfiguracionSistema
 from .adapters import obtener_proveedor_videollamada
-
+from .adapter_daily import ErrorProveedorVideollamada
 
 # ---------------------------------------------------------------------
 # Factory Method #1: Usuario (paciente / médico) — usado en el registro
@@ -137,6 +137,7 @@ class CitaPresencialCreator(CitaCreator):
         )
 
 class CitaVirtualCreator(CitaCreator):
+    
     def crear_cita(self, datos: dict) -> Cita:
         cita = Cita.objects.create(
             paciente=Paciente.objects.get(pk=datos["paciente_id"]),
@@ -150,12 +151,15 @@ class CitaVirtualCreator(CitaCreator):
         )
 
         # --- Aquí entra el Adapter ---
-        # CitaVirtualCreator no sabe nada de Zoom ni de Jitsi: solo le
-        # pide una sala a "un proveedor de videollamadas" cualquiera.
+                # --- Aquí entra el Adapter ---
         config = ConfiguracionSistema()
         nombre_proveedor = datos.get("proveedor_videollamada", config.proveedor_videollamada_por_defecto)
-        proveedor = obtener_proveedor_videollamada(nombre_proveedor)
-        sala = proveedor.crear_sala(cita)
+        try:
+            sala = obtener_proveedor_videollamada(nombre_proveedor).crear_sala(cita)
+        except ErrorProveedorVideollamada as e:
+            # La cita se agenda igual: la sala se crea cuando alguien entre
+            print(f"[CitaFactory] Cita virtual #{cita.id} creada SIN sala ({e}); se creará al entrar")
+            return cita
 
         cita.sala_id = sala.sala_id
         cita.url_medico = sala.url_medico

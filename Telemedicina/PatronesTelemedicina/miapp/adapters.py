@@ -8,6 +8,7 @@ particulares de cada uno.
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from .adapter_daily import ProveedorDaily
 
 
 # ---------------------------------------------------------------------
@@ -109,8 +110,10 @@ def obtener_proveedor_videollamada(nombre: str) -> ProveedorVideollamada:
     proveedores = {
         "zoom": ZoomAdapter,
         "jitsi": JitsiAdapter,
+        "daily": ProveedorDaily,
     }
     clase = proveedores.get(nombre)
     if clase is None:
         raise ValueError(f"Proveedor de videollamada no soportado: {nombre}")
-    return clase()
+    if nombre == "daily":
+        return ProveedorDaily()

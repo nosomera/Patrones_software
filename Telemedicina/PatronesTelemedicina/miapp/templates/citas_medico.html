@@ -54,6 +54,7 @@
   {% if cita.estado == "reagendada" %}
     <a href="{% url 'historial_cambios_cita' cita.id %}" class="btn btn-sm btn-outline-secondary">Historial</a>
   {% endif %}
+  {% include "_boton_videollamada.html" %}
   <a href="{% url 'chat_cita' cita.id %}" class="btn btn-sm btn-outline-primary">💬 Chat</a>
 </div>
 

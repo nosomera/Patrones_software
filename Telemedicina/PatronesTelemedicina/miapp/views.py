@@ -1075,3 +1075,18 @@ def lote_autorizaciones_view(request):
         })
 
     return redirect("autorizaciones")
+
+@login_required
+@require_POST
+def unirse_videollamada_view(request, cita_id):
+    cita = get_object_or_404(Cita.objects.select_related("paciente__usuario", "medico__usuario"), pk=cita_id)
+    if rol_en_cita(cita, request.user) is None:
+        raise Http404
+
+    destino = "citas_medico" if request.user.tipo_usuario == "medico" else "listar_citas"
+    try:
+        url = MediadorCitas().unirse_videollamada(request.user, cita)
+    except ErrorMediador as e:
+        messages.error(request, str(e))
+        return redirect(destino)
+    return redirect(url)

@@ -9,7 +9,8 @@ from .mementos import CitaReagendable, HistorialReagendamientos
 from .models import MensajeChat, Notificacion
 from .singleton import ConfiguracionSistema
 from .states import CitaContexto, TransicionInvalida
-
+from .adapter_daily import ErrorProveedorVideollamada
+from .adapters import obtener_proveedor_videollamada
 
 class ErrorMediador(Exception):
     """Regla de negocio incumplida. El mensaje se le muestra al usuario."""
@@ -258,6 +259,57 @@ class MediadorCitas(Mediador):
         except TransicionInvalida as e:
             raise ErrorMediador(str(e))
         return cita
+
+
+    def unirse_videollamada(self, usuario, cita):
+        """Valida, prepara la sala si hace falta y devuelve la URL personal de esa persona."""
+        print(f"[Mediator] Solicitud: {usuario.nombre_completo} quiere entrar a la videollamada de la cita #{cita.id}")
+        rol = rol_en_cita(cita, usuario)
+        if rol is None:
+            raise ErrorMediador("No participas en esta cita")
+        if cita.tipo != "virtual":
+            raise ErrorMediador("Esta cita es presencial: no tiene videollamada")
+        _exigir(cita, "unirse")                      # State: ¿el estado de la cita lo permite?
+
+        config = ConfiguracionSistema()
+        inicio, fin = cita.ventana_videollamada
+        ahora = datetime.now()
+        if config.videollamada_sin_restriccion_horaria:
+            vigencia = config.minutos_vigencia_token_demo * 60    # modo demostración
+            print("[Mediator] Modo demostración: se omite la ventana de tiempo")
+        else:
+            if ahora < inicio:
+                raise ErrorMediador(f"La sala se abre el {inicio:%d/%m/%Y} a las {inicio:%H:%M}")
+            if ahora > fin:
+                raise ErrorMediador("La ventana para entrar a la videollamada ya se cerró")
+            vigencia = (fin - ahora).total_seconds()
+
+        proveedor = obtener_proveedor_videollamada(
+            cita.proveedor_videollamada or config.proveedor_videollamada_por_defecto
+        )
+        try:
+            if not cita.sala_id:                     # cita anterior, o el proveedor falló al agendar
+                sala = proveedor.crear_sala(cita)
+                cita.sala_id, cita.url_medico = sala.sala_id, sala.url_medico
+                cita.url_paciente, cita.proveedor_videollamada = sala.url_paciente, sala.proveedor
+                cita.save(update_fields=["sala_id", "url_medico", "url_paciente", "proveedor_videollamada"])
+            if hasattr(proveedor, "url_de_acceso"):
+                url = proveedor.url_de_acceso(cita, usuario, rol, vigencia)
+            else:                                    # proveedor anterior: usa las URL guardadas
+                url = cita.url_medico if rol == "medico" else cita.url_paciente
+        except ErrorProveedorVideollamada as e:
+            raise ErrorMediador(str(e))
+        if not url:
+            raise ErrorMediador("La cita no tiene una sala de videollamada disponible")
+
+        otra = self._la_otra_parte(cita, usuario)
+        if not self.notificador.hay_pendiente(otra, "videollamada", cita):   # un solo aviso hasta que lo lea
+            self.notificador.avisar(
+                otra, "videollamada",
+                f"{usuario.nombre_completo} ya está en la sala de videollamada de la cita de las {cita.hora:%H:%M}.",
+                cita,
+            )
+        return url
 
     # ---------------- operaciones para deshacer (las usan los comandos) ----------------
 

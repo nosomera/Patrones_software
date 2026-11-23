@@ -1,0 +1,14 @@
+{% if cita.tipo == "virtual" %}
+  {% with estado=cita.estado_videollamada %}
+    {% if estado == "disponible" %}
+      <form method="post" action="{% url 'unirse_videollamada' cita.id %}" target="_blank" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-success fw-bold">🎥 Unirse</button>
+      </form>
+    {% elif estado == "proxima" %}
+      <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
+        🎥 Desde {{ cita.ventana_videollamada.0|date:"d/m H:i" }}
+      </button>
+    {% endif %}
+  {% endwith %}
+{% endif %}

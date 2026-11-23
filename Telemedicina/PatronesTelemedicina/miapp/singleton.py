@@ -73,6 +73,9 @@ class ConfiguracionSistema:
         self.max_versiones_borrador = 10
         self.segundos_autoguardado = 60
         
+        self.videollamada_sin_restriccion_horaria = True   # True = entrar a cualquier hora; False = solo en la ventana normal
+        self.minutos_vigencia_token_demo = 120
+        
         self.horas_minimas_cancelar = 24
         self.dias_chat_abierto = 7
         self.max_caracteres_mensaje = 1000
@@ -91,6 +94,13 @@ class ConfiguracionSistema:
         # Observer: autorizaciones y resultados
         self.dias_vigencia_autorizacion = 30
         self.dias_aviso_renovacion = 7
+        
+        # Videollamada (Adapter con Daily)
+        self.proveedor_videollamada_por_defecto = "daily"
+        self.minutos_antes_videollamada = 15
+        self.minutos_despues_videollamada = 60
+        self.daily_max_participantes = 2
+        self.daily_timeout_segundos = 10
         
    # Strategy: triaje
         self.horas_validez_triaje = 24

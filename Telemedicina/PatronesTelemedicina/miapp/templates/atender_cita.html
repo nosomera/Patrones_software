@@ -4,6 +4,7 @@
 {% block content %}
 <h1 class="fw-bold text-primary mb-1">Atender a {{ cita.paciente.usuario.nombre_completo }}</h1>
 <p class="text-muted mb-4">{{ cita.fecha|date:"d/m/Y" }} · {{ cita.hora|time:"H:i" }} · {{ cita.get_tipo_display }}</p>
+{% include "_boton_videollamada.html" %}
 
 {% if aviso_borrador %}
   <div class="alert alert-info">Recuperamos tu borrador, guardado hace {{ aviso_borrador|timesince }}.</div>

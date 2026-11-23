@@ -54,6 +54,10 @@ urlpatterns = [
     path("catalogos/importar/", views.importar_catalogo_view, name="importar_catalogo"),
     path("catalogos/<slug:codigo>/ejemplo/", views.ejemplo_catalogo_view, name="ejemplo_catalogo"),
     
+    path("acciones/<int:registro_id>/deshacer/", views.deshacer_accion_view, name="deshacer_accion"),
+    path("autorizaciones/lote/", views.lote_autorizaciones_view, name="lote_autorizaciones"),
+    path("citas/<int:cita_id>/videollamada/", views.unirse_videollamada_view, name="unirse_videollamada"),
+    
 path("citas/", views.listar_citas_view, name="listar_citas"),
 path("citas/<int:cita_id>/reagendar/", views.reagendar_cita_view, name="reagendar_cita"),
 path("medico/citas/", views.citas_medico_view, name="citas_medico"),
