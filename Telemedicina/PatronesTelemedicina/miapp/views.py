@@ -972,8 +972,7 @@ def dashboard_admin(request):
     modulos = [
         {"icono": "📥", "titulo": "Importar catálogos", "descripcion": "Carga medicinas y diagnósticos desde un archivo CSV.", "url": reverse("importar_catalogo")},
         
-        {"icono": "⚙️", "titulo": "Panel de administración", "descripcion": "Gestiona usuarios, sedes, especialidades y demás datos.", "url": reverse("admin:index")},
-    ]
+      ]
     return render(request, "dashboard_admin.html", {"modulos": modulos})
 
 
